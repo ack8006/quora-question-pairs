@@ -17,6 +17,7 @@ class AttentionModel(nn.Module):
              Batch x Seq_Len"""
 
     def __init__(self, debug=False):
+        super(AttentionModel, self).__init__()
         # Softmax computes softmax on dim1 only.
         self.softmax = nn.Softmax()
         self.debug = debug
@@ -27,7 +28,7 @@ class AttentionModel(nn.Module):
         wl = self.get_scores(xs, q)
         w = self.softmax(wl)
 
-        if debug:
+        if self.debug:
             assert (w.sum(1) == 1).prod().data[0] == 1, \
                 'softmax for all minibatches must sum to 1'
 
@@ -49,3 +50,21 @@ class AttentionModel(nn.Module):
         #      (B,S,H) * (B,H) ...=> (B,S)
         # bmm: (B,S,H) * (B,H,1)  => (B,S,1) => (B,S)
         wl = torch.bmm(xs, q.unsqueeze(2)).squeeze()
+
+
+def BilinearAttentionModel(AttentionModel):
+    """Attention model that uses a 'bilinear transform' for compatibility.
+
+    For a pair (x, y), instead of computing an inner product <x, y>, do a
+    quadratic form x^T*A*y where A is a learned parameter.
+    
+    This model needs to know the hidden layer size, unlike inprod Attention."""
+
+    def __init__(self, hidden_size, debug=False)
+        super(BilinearAttentionModel, self).__init__(debug)
+        self.A = nn.Linear(hidden_size, hidden_size)
+
+    def get_scores(self, xs, q):
+        # (B,S,H) * [H,H](B,H)
+        return super(BilinearAttentionModel, self).get_scores(xs, self.A(q))
+
