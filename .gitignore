@@ -90,3 +90,8 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+glove.*.txt
+*.swp
+*.csv
+*.zip
