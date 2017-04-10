@@ -41,6 +41,7 @@ class Attend(nn.Module):
             "attention_2",
             FeedForward(d_in=n_hidden, d_out=n_hidden, activation=activation)
         )
+        # TODO: Add softmax
 
     def forward(self, a, b):
         a_v = a.contiguous().view(a.size(0) * a.size(1), a.size(2))
