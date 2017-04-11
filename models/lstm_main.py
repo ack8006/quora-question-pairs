@@ -61,7 +61,7 @@ def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.8):
     X, y = pad_and_shape(question_field, q1, q2, y, len(train_data), device)
     X_val, y_val = pad_and_shape(question_field, q1_val, q2_val, y_val, len(val_data), device)
 
-    return X, y, X_val, y_val
+    return X, y, X_val, y_val, question_field
 
 
 def clean_and_tokenize(data):
@@ -84,10 +84,25 @@ def pad_and_shape(field, q1, q2, y, num_samples, cuda):
     return X, y
 
 
+def get_glove_embeddings(file_path, corpus, ntoken, nemb):
+    file_name = '/glove.6B.{}d.txt'.format(nemb)
+    f = open(file_path+file_name, 'r')
+    embeddings = torch.nn.init.xavier_uniform(torch.Tensor(ntoken, nemb))
+    for line in f:
+        split_line = line.split()
+        word = split_line[0]
+        if word in corpus:
+            embedding = torch.Tensor([float(val) for val in split_line[1:]])
+            embeddings[corpus.dictionary.word2idx[word]] = embedding
+    return embeddings
+
+
 def main():
     parser = argparse.ArgumentParser(description='PyTorch PennTreeBank RNN/LSTM Language Model')
     parser.add_argument('--data', type=str, default='../data/train.csv',
                         help='location of the data corpus')
+    parser.add_argument('--glovedata', type=str, default='../data/glove.6B',
+                        help='location of the pretrained glove embeddings')
     parser.add_argument('--din', type=int, default=30,
                         help='length of LSTM')
     parser.add_argument('--demb', type=int, default=100,
@@ -103,7 +118,7 @@ def main():
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping')
     parser.add_argument('--embinit', type=str, default='random',
-                        help='encoder weight initialization type')
+                        help='embedding weight initialization type')
     parser.add_argument('--decinit', type=str, default='random',
                         help='decoder weight initialization type')
     parser.add_argument('--hidinit', type=str, default='random',
@@ -129,8 +144,7 @@ def main():
     args = parser.parse_args()
 
 
-
-    X, y, X_val, y_val = load_data(args.data, args.din, args.vocabsize, args.cuda, train_split=0.8)
+    X, y, X_val, y_val, q_field = load_data(args.data, args.din, args.vocabsize, args.cuda, train_split=0.8)
 
     print('Generating Data Loaders')
     #X.size len(train_data),1,2,fix_length
@@ -144,16 +158,28 @@ def main():
                                 batch_size=len(X_val),
                                 shuffle=False)
 
-    # vocab_size = len(question_field.vocab.itos)
+
+    ntokens = len(q_field.vocab.itos)
+    glove_embeddings = None
+    if args.embinit == 'glove':
+        assert args.demb in (50, 100, 200, 300)
+        glove_embeddings = get_glove_embeddings(args.glovedata, q_field.vocab.stoi, ntokens, args.demb)
+    
 
     model = LSTMModel(args.din, args.dhid, args.nlayers, args.dout, args.demb, args.vocabsize, 
-                        args.dropout, args.embinit, args.hidinit, args.decinit)
+                        args.dropout, args.embinit, args.hidinit, args.decinit, glove_embeddings)
 
     if args.cuda:
         model.cuda()
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+
+    model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, 
+                        args.embinit, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize)])
+
+    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize')
+    print(model_config)
 
     for epoch in range(args.epochs):
         model.train()

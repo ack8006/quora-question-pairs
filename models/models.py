@@ -68,7 +68,7 @@ class BiLSTM(nn.Module):
 
 class LSTMModel(nn.Module):
     def __init__(self, d_in, d_hid, n_layers, d_out, d_emb, vocab, dropout,
-                    emb_init, hid_init, dec_init):
+                    emb_init, hid_init, dec_init, glove_emb):
         super(LSTMModel, self).__init__()
 
         self.d_hid = d_hid
@@ -89,17 +89,21 @@ class LSTMModel(nn.Module):
         # #d_hid * directions * questions * layers
         # self.seq_3.add_module('mlp', FC(d_hid * 2 * 2 * n_layers, d_out, dropout))
 
-        self.init_weights(emb_init, hid_init, dec_init)
+        self.init_weights(emb_init, hid_init, dec_init, glove_emb)
 
 
-    def init_weights(self, emb_init, hid_init, dec_init):
+    def init_weights(self, emb_init, hid_init, dec_init, glove_emb):
         init_types = {'random':functools.partial(init.uniform, a=-0.1, b=0.1),
                         'constant': functools.partial(init.constant, val=0.1),
                         'xavier_n': init.xavier_normal,
                         'xavier_u': init.xavier_uniform,
                         'orthogonal': init.orthogonal}
-        init_types[emb_init](self.embedding1.weight)
-        init_types[emb_init](self.embedding2.weight)
+        if emb_init == 'glove' and glove_emb:
+            self.embedding1.weight.data = glove_emb
+            self.embedding2.weight.data = glove_emb
+        else:
+            init_types[emb_init](self.embedding1.weight)
+            init_types[emb_init](self.embedding2.weight)
 
         init_types[hid_init](self.bilstm_1.weight_ih_l)
         init_types[hid_init](self.bilstm_1.weight_hh_l)
