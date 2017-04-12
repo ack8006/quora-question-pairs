@@ -13,9 +13,13 @@ from torch.nn.utils import clip_grad_norm
 from torch.utils.data import TensorDataset, DataLoader
 from torchtext import data
 
+import nltk
 from nltk.tokenize import word_tokenize
 
 from models import LSTMModel
+
+
+nltk.data.path.append('/scratch/act444/github/quora-question-pairs/data/nltk_data')
 
 # data_path = '../data/train.csv'
 # d_in = 30
