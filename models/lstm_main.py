@@ -38,10 +38,10 @@ from models import LSTMModel
 def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.80):
     print('Loading Data')
     train_data = pd.read_csv(data_path)
-    # val_data = train_data.iloc[int(len(train_data)*train_split):]
-    # train_data = train_data.iloc[:int(len(train_data)*train_split)]
-    val_data = train_data.iloc[1000:2000]
-    train_data = train_data.iloc[:1000]
+    val_data = train_data.iloc[int(len(train_data)*train_split):]
+    train_data = train_data.iloc[:int(len(train_data)*train_split)]
+    # val_data = train_data.iloc[1000:2000]
+    # train_data = train_data.iloc[:1000]
 
     print('Cleaning and Tokenizing')
     q1, q2, y = clean_and_tokenize(train_data)
