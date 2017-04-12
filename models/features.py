@@ -11,13 +11,18 @@ logger = logging.getLogger('features')
 
 
 class Permute(nn.Module):
-    def __init__(self, sentence_length=30,
+    def __init__(self, out_features, sentence_length=30,
             n_trials=2000, power=0.1, differentiable=False):
         super(Permute, self).__init__()
         self.n_trials = n_trials
         self.seq_len = sentence_length
         self.power = power
         self.differentiable = differentiable
+        # Only used in differentiable mode. Correction term.
+        self.bias = Parameter(torch.Tensor(out_features))
+
+    def reset_parameters(self):
+	self.bias.data.fill_(0)
 
     def forward(self, q1, q2):
         mean_q1 = q1.mean(dim=1)
@@ -39,7 +44,7 @@ class Permute(nn.Module):
 
         diffs = trial_means - mean_dist.repeat(1, self.n_trials, 1)
         if self.differentiable:
-            return permutation, F.relu(diffs).pow(self.power).mean(dim=1).squeeze()
+            return permutation, F.relu(diffs).pow(self.power).mean(dim=1).squeeze() + self.bias
         else:
             return permutation, (diffs > 0).float().mean(dim=1).squeeze()
 
