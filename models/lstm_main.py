@@ -2,11 +2,14 @@ import sys
 sys.path.append('../models/text/')
 
 import argparse
+import time
 
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
+from torch.autograd import Variable
+from torch.nn.utils import clip_grad_norm
 from torch.utils.data import TensorDataset, DataLoader
 from torchtext import data
 from torchtext import datasets
@@ -22,13 +25,16 @@ d_in = 30
 d_emb = 50
 cuda = False
 batch_size = 20
-epochs = 5
+epochs = 20
 d_out = 2
 d_hid = 50
 n_layers = 1
-lr = 0.01
+optimizer = True
+lr = 0.05
 dropout = 0.0
+clip = 0.25
 cuda = False
+log_interval = 200
 
 
 def main():
@@ -75,6 +81,9 @@ def main():
     train_loader = DataLoader(TensorDataset(X, y), 
                                 batch_size=batch_size, 
                                 shuffle=True)
+    train_loader2 = DataLoader(TensorDataset(X, y),
+                                batch_size = len(X),
+                                shuffle=False)
 
     vocab_size = len(question_field.vocab.itos)
 
@@ -85,12 +94,43 @@ def main():
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    
 
     for epoch in range(epochs):
         model.train()
-        for ind, (qs, dup) in enumerate(train_loader):
+        total_cost = 0
+        for ind, (qs, duplicate) in enumerate(train_loader):
+            start_time = time.time()
+            duplicate = Variable(duplicate)
             model.zero_grad()
-            print(model(qs[:, 0, 0, :], qs[:, 0, 1, :]))
+            pred = model(qs[:, 0, 0, :], qs[:, 0, 1, :])
+            loss = criterion(pred, duplicate)
+            loss.backward()
+            clip_grad_norm(model.parameters(), clip)
+
+            if optimizer:
+                optimizer.step()
+            else:
+                for p in model.parameters():
+                    p.data.add_(-lr, p.grad.data)
+
+            total_cost += loss.data[0]
+
+            if (ind*batch_size) % log_interval == 0 and ind > 0:
+                cur_loss = total_cost / (ind*batch_size)
+                elapsed = time.time() - start_time
+                print('| epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | '
+                        'loss {:.6f}'.format(
+                    epoch, ind, len(X) // batch_size,
+                    elapsed * 1000.0 / log_interval, cur_loss))
+
+        for ind, (qs, duplicate) in enumerate(train_loader2):
+            model.eval()
+            pred = model(qs[:, 0, 0, :], qs[:, 0, 1, :]).data.numpy().argmax(axis=1)
+
+            print('Epoch: {} | Accuracy: {:.4f} | Train Loss: {:.4f}'.format(
+                epoch, np.mean(pred == duplicate.numpy()), total_cost))
+        print('-' * 89)
 
             
 

@@ -7,18 +7,18 @@ from torch.autograd import Variable
 
 #TODO
 '''
-- 
+- Batchnorm
 '''
 
 class MLP(nn.Module):
     def __init__(self, d_in, d_out, dropout):
         super(MLP, self).__init__()
         self.sequential = nn.Sequential()
-#BATCHNORM
         self.sequential.add_module('linear1', nn.Linear(d_in, 
                                                         d_out, 
                                                         bias=True))
         self.sequential.add_module('softmax', nn.LogSoftmax())
+
 
     def forward(self, X):
         out = self.sequential(X)
@@ -26,25 +26,21 @@ class MLP(nn.Module):
 
 
 class BiLSTM(nn.Module):
-    def __init__(self, d_in, d_hid, n_layers, dropout):
+    def __init__(self, d_emb, d_hid, n_layers, dropout):
         super(BiLSTM, self).__init__()
-        # self.d_hid = d_hid
-        # self.n_layers = n_layers
-        self.lstm = nn.LSTM(d_in, 
+        self.lstm = nn.LSTM(d_emb, 
                             d_hid, 
                             n_layers,
                             bias=True,
-                            # batch_first=True, 
+                            batch_first=True, 
                             bidirectional=True,
                             dropout = dropout)
 
+
     def forward(self, x, h):
-        # h0 = Variable(torch.zeros(self.n_layers*2, x.size()[0], self.d_hid))
-        # c0 = Variable(torch.zeros(self.n_layers*2, x.size()[0], self.d_hid))
-        # out, _ = self.lstm(x, (h0, c0))
-        print(x.size(), h[0].size(), h[1].size())
-        out, _ = self.lstm(x, h)
-        return out
+        out, hid = self.lstm(x, h)
+        #out, hidden, cell
+        return out, hid[0], hid[1]
 
 
 class LSTMModel(nn.Module):
@@ -58,14 +54,15 @@ class LSTMModel(nn.Module):
         self.drop = nn.Dropout(dropout)
 
         self.embedding1 = nn.Embedding(vocab, d_emb)
-        self.bilstm_1 = BiLSTM(d_in, d_hid, n_layers, dropout)
+        self.bilstm_1 = BiLSTM(d_emb, d_hid, n_layers, dropout)
 
         self.embedding2 = nn.Embedding(vocab, d_emb)
-        self.bilstm_2 = BiLSTM(d_in, d_hid, n_layers, dropout)
+        self.bilstm_2 = BiLSTM(d_emb, d_hid, n_layers, dropout)
 
         self.seq_3 = nn.Sequential()
         self.seq_3.add_module('drop', nn.Dropout(dropout))
-        self.seq_3.add_module('mlp', MLP(d_hid*2, d_out, dropout))
+        #d_hid * directions * questions * layers
+        self.seq_3.add_module('mlp', MLP(d_hid*2*2*n_layers, d_out, dropout))
 
         self.init_weights('random')
 
@@ -84,26 +81,23 @@ class LSTMModel(nn.Module):
         X1 = Variable(torch.from_numpy(X1.numpy()).long())
         X2 = Variable(torch.from_numpy(X2.numpy()).long())
         emb1 = self.drop(self.embedding1(X1))
-        # emb1 = self.embedding1(X1)
-        # emb1 = self.drop(emb1)
 
         h1 = self.init_hidden(X1.size()[0])
-        out1, hid1 = self.bilstm_1(emb1, h1)
-        # out1, hid1 = self.bilstm_1(emb1)
+        out1, hid1, cell1 = self.bilstm_1(emb1, h1)
 
         emb2 = self.drop(self.embedding2(X2))
         h2 = self.init_hidden(X2.size()[0])
-        out2, hid2 = self.bilstm_2(emb2, h2)
-        # out2, hid2 = self.bilstm_2(emb2)
+        out2, hid2, cell2 = self.bilstm_2(emb2, h2)
 
-#***Perhaps should be 2 not 1
-        print(torch.cat([out1, out2], 1).size())
-        return self.seq_3(torch.cat[out1, out2], 1)
+        hid1 = torch.cat(torch.chunk(hid1, hid1.size()[0]), 2)[0]
+        hid2 = torch.cat(torch.chunk(hid2, hid1.size()[0]), 2)[0]
+
+        h_cat = torch.cat([hid1, hid2], 1)
+        # h_cat = torch.cat([torch.cat([hid1[0], hid1[1]], 1), torch.cat([hid2[0], hid2[1]], 1)], 1)
+        return self.seq_3(h_cat)
 
 
     def init_hidden(self, batch_size):
-        print('dhid:', self.d_hid)
-        print(Variable(torch.zeros(self.n_layers*2, batch_size, self.d_hid)).size())
         return (Variable(torch.zeros(self.n_layers*2, batch_size, self.d_hid)), 
                 Variable(torch.zeros(self.n_layers*2, batch_size, self.d_hid)))
 
