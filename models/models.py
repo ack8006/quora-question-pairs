@@ -68,7 +68,7 @@ class BiLSTM(nn.Module):
 
 class LSTMModel(nn.Module):
     def __init__(self, d_in, d_hid, n_layers, d_out, d_emb, vocab, dropout,
-                    emb_init, hid_init, dec_init, glove_emb):
+                    emb_init, hid_init, dec_init, glove_emb, freeze_emb):
         super(LSTMModel, self).__init__()
 
         self.d_hid = d_hid
@@ -77,9 +77,11 @@ class LSTMModel(nn.Module):
         self.drop = nn.Dropout(dropout)
 
         self.embedding1 = nn.Embedding(vocab, d_emb)
+        self.embedding1.weight.requires_grad = freeze_emb
         self.bilstm_1 = BiLSTM(d_emb, d_hid, n_layers, dropout)
 
         self.embedding2 = nn.Embedding(vocab, d_emb)
+        self.embedding2.weight.requires_grad = freeze_emb
         self.bilstm_2 = BiLSTM(d_emb, d_hid, n_layers, dropout)
 
         #(d_hid * directions * questions * layers)
@@ -98,24 +100,26 @@ class LSTMModel(nn.Module):
                         'xavier_n': init.xavier_normal,
                         'xavier_u': init.xavier_uniform,
                         'orthogonal': init.orthogonal}
-        if emb_init == 'glove' and glove_emb:
+        if emb_init == 'glove' and glove_emb is not None:
             self.embedding1.weight.data = glove_emb
             self.embedding2.weight.data = glove_emb
         else:
             init_types[emb_init](self.embedding1.weight)
             init_types[emb_init](self.embedding2.weight)
 
-        init_types[hid_init](self.bilstm_1.weight_ih_l)
-        init_types[hid_init](self.bilstm_1.weight_hh_l)
-        init_types[hid_init](self.bilstm_2.weight_ih_l)
-        init_types[hid_init](self.bilstm_2.weight_hh_l)
+        # init_types[hid_init](self.bilstm_1.weight_ih_l)
+        # init_types[hid_init](self.bilstm_1.weight_hh_l)
+        # init_types[hid_init](self.bilstm_2.weight_ih_l)
+        # init_types[hid_init](self.bilstm_2.weight_hh_l)
 
-        init_types[dec_init](self.fc.weight)
+        # init_types[dec_init](self.fc.weight)
 
 
     def forward(self, X1, X2):
         # X1 = Variable(torch.from_numpy(X1.numpy()).long())
         # X2 = Variable(torch.from_numpy(X2.numpy()).long())
+        X1 = Variable(X1)
+        X2 = Variable(X2)
 
         emb1 = self.drop(self.embedding1(X1))
         h1 = self.init_hidden(X1.size()[0])

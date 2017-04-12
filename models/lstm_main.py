@@ -12,12 +12,8 @@ from torch.autograd import Variable
 from torch.nn.utils import clip_grad_norm
 from torch.utils.data import TensorDataset, DataLoader
 from torchtext import data
-from torchtext import datasets
 
 from nltk.tokenize import word_tokenize
-
-# import pandas as pd
-# from torch.nn.utils import clip_grad_norm
 
 from models import LSTMModel
 
@@ -39,11 +35,13 @@ from models import LSTMModel
 # log_interval = 200
 
 
-def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.8):
+def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.80):
     print('Loading Data')
     train_data = pd.read_csv(data_path)
-    val_data = train_data.iloc[int(len(train_data)*train_split):]
-    train_data = train_data.iloc[:int(len(train_data)*train_split)]
+    # val_data = train_data.iloc[int(len(train_data)*train_split):]
+    # train_data = train_data.iloc[:int(len(train_data)*train_split)]
+    val_data = train_data.iloc[1000:2000]
+    train_data = train_data.iloc[:1000]
 
     print('Cleaning and Tokenizing')
     q1, q2, y = clean_and_tokenize(train_data)
@@ -58,8 +56,8 @@ def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.8):
         device = 1
 
     print('Padding and Shaping')
-    X, y = pad_and_shape(question_field, q1, q2, y, len(train_data), device)
-    X_val, y_val = pad_and_shape(question_field, q1_val, q2_val, y_val, len(val_data), device)
+    X, y = pad_and_shape(question_field, q1, q2, y, len(train_data), d_in, device)
+    X_val, y_val = pad_and_shape(question_field, q1_val, q2_val, y_val, len(val_data), d_in, device)
 
     return X, y, X_val, y_val, question_field
 
@@ -73,7 +71,7 @@ def clean_and_tokenize(data):
     return q1, q2, y
 
 
-def pad_and_shape(field, q1, q2, y, num_samples, cuda):
+def pad_and_shape(field, q1, q2, y, num_samples, d_in, cuda):
     q1_pad_num = field.numericalize(field.pad(q1), device=cuda)
     q2_pad_num = field.numericalize(field.pad(q2), device=cuda)
     X = torch.Tensor(1, 2, d_in, num_samples)
@@ -93,7 +91,8 @@ def get_glove_embeddings(file_path, corpus, ntoken, nemb):
         word = split_line[0]
         if word in corpus:
             embedding = torch.Tensor([float(val) for val in split_line[1:]])
-            embeddings[corpus.dictionary.word2idx[word]] = embedding
+            # embeddings[corpus.dictionary.word2idx[word]] = embedding
+            embeddings[corpus[word]] = embedding
     return embeddings
 
 
@@ -113,7 +112,7 @@ def main():
                         help='number of output classes')
     parser.add_argument('--nlayers', type=int, default=1,
                         help='number of layers')
-    parser.add_argument('--lr', type=float, default=0.05,
+    parser.add_argument('--lr', type=float, default=0.01,
                         help='initial learning rate')
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping')
@@ -131,13 +130,15 @@ def main():
                         help='batch size')
     parser.add_argument('--seed', type=int, default=42,
                         help='random seed')
-    parser.add_argument('--vocabsize', type=int, default=20000,
+    parser.add_argument('--vocabsize', type=int, default=60000,
                         help='random seed')
     parser.add_argument('--optimizer', action='store_true',
                         help='use ADAM optimizer')
+    parser.add_argument('--freezeemb', action='store_false',
+                        help='freezes embeddings')
     parser.add_argument('--cuda', action='store_true',
                         help='use CUDA')
-    parser.add_argument('--log-interval', type=int, default=200, metavar='N',
+    parser.add_argument('--loginterval', type=int, default=100, metavar='N',
                         help='report interval')
     parser.add_argument('--save', type=str,  default='',
                         help='path to save the final model')
@@ -148,12 +149,13 @@ def main():
 
     print('Generating Data Loaders')
     #X.size len(train_data),1,2,fix_length
-    train_loader = DataLoader(TensorDataset(X, y), 
+    train_dataset = TensorDataset(X, y)
+    train_loader = DataLoader(train_dataset, 
                                 batch_size=args.batchsize, 
                                 shuffle=True)
-    # train_loader2 = DataLoader(TensorDataset(X, y),
-    #                             batch_size = len(X),
-    #                             shuffle=False)
+    train_loader2 = DataLoader(train_dataset,
+                                batch_size = len(X),
+                                shuffle=False)
     valid_loader = DataLoader(TensorDataset(X_val, y_val),
                                 batch_size=len(X_val),
                                 shuffle=False)
@@ -167,7 +169,8 @@ def main():
     
 
     model = LSTMModel(args.din, args.dhid, args.nlayers, args.dout, args.demb, args.vocabsize, 
-                        args.dropout, args.embinit, args.hidinit, args.decinit, glove_embeddings)
+                        args.dropout, args.embinit, args.hidinit, args.decinit, glove_embeddings,
+                        args.freezeemb)
 
     if args.cuda:
         model.cuda()
@@ -176,9 +179,9 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, 
-                        args.embinit, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize)])
+                        args.embinit, args.freezeemb, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize)])
 
-    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize')
+    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | FreezeEmb | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize')
     print(model_config)
 
     for epoch in range(args.epochs):
@@ -201,23 +204,31 @@ def main():
 
             total_cost += loss.data[0]
 
-            if (ind * args.batchsize) % args.log_interval == 0 and ind > 0:
+            if ind % args.loginterval == 0 and ind > 0:
                 cur_loss = total_cost / (ind * args.batchsize)
                 elapsed = time.time() - start_time
                 print('| Epoch {:3d} | {:5d}/{:5d} Batches | ms/batch {:5.2f} | '
                         'Loss {:.6f}'.format(
                             epoch, ind, len(X) // args.batchsize,
-                            elapsed * 1000.0 / args.log_interval, cur_loss))
+                            elapsed * 1000.0 / args.loginterval, cur_loss))
 
-        for ind, (qs, duplicate) in enumerate(valid_loader):
+        train_acc = 0
+        for ind, (qs, duplicate) in enumerate(train_loader2):
+            duplicate = Variable(duplicate)
             model.eval()
             out = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
             pred = out.data.numpy().argmax(axis=1)
-            valid_loss = criterion(pred, duplicate).data[0]
-            acc = np.mean(pred == duplicate.numpy())
+            train_acc = np.mean(pred == duplicate.data.numpy())      
 
-            print('Epoch: {} | Train Loss: {:.4f} | Valid Loss: {:.4f} | Accuracy: {:.4f}'.format(
-                epoch, total_cost, valid_loss, acc))
+        for ind, (qs, duplicate) in enumerate(valid_loader):
+            duplicate = Variable(duplicate)
+            model.eval()
+            out = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
+            pred = out.data.numpy().argmax(axis=1)
+            acc = np.mean(pred == duplicate.data.numpy())
+
+            print('Epoch: {} | Train Loss: {:.4f} | Train Accuracy: {:.4f} | Val Accuracy: {:.4f}'.format(
+                epoch, total_cost, train_acc, acc))
         print('-' * 89)
 
 
