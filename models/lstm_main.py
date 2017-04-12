@@ -14,12 +14,12 @@ from torch.utils.data import TensorDataset, DataLoader
 from torchtext import data
 
 import nltk
+nltk.download('punkt')
 from nltk.tokenize import word_tokenize
 
 from models import LSTMModel
 
 
-nltk.data.path.append('/scratch/act444/github/quora-question-pairs/data/nltk_data')
 
 # data_path = '../data/train.csv'
 # d_in = 30
