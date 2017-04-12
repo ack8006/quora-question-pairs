@@ -5,25 +5,32 @@ import torch
 import logging
 import csv
 
+from torch import nn
+from torch.autograd import Variable
+
 logger = logging.getLogger('data')
 
-def load_embeddings(filepath):
-    '''Load a GloVE embedding into a Tensor.
+def load_embeddings(filepath, max_words=50000, embed_dim=100):
+    '''Load a GloVE embedding into a nn.Embedding.
+    The 2nd-to-last word will be changed into a 'padding' word with embedding 0.
+    The last word will be changed into an "unknown" embedding by averaging.
 
     Args:
         filepath: path to a GloVE embeding file (i.e. 6B.100d.txt)
+        max_words: maximum # of words to load.
+        embed_size: dimension embedding size.
     
     Returns:
         dictionary: a Python dict from word string to row number
-        tensor: a torch.Tensor containing the embeddings (no CUDA)'''
+        lookup: a Python array from row number to word string
+        embed: the Embeddings module.'''
     dictionary = {}
-    current_word = 0
+    lookup = []
     rows = []
    
     logger.info('loading from %s', filepath)
-    read_lines = 0
     with open(filepath, "rb") as f:
-        for line in f:
+        for current_word, line in enumerate(f):
             line = line.decode("utf-8")
             elements = line.strip().split(' ', 1)
             word = elements[0]
@@ -31,140 +38,108 @@ def load_embeddings(filepath):
             vector = np.array(vector)
             
             word_id = current_word
-            current_word += 1
             dictionary[word] = word_id
+            lookup.append(word)
             rows.append(vector)
 
-            read_lines += 1
-            if read_lines % 10000 == 0:
-                logger.info('loaded %d words', read_lines)
-    return dictionary, torch.Tensor(np.stack(rows, axis=0))
+            if current_word % 10000 == 0:
+                logger.info('loaded %d words', current_word)
+            if current_word == max_words:
+                break
+    embeddings = torch.from_numpy(np.stack(rows, axis=0)).float()
+    avg = embeddings.mean(dim=0)
+    embeddings[-1,:] = avg
+    embeddings[-2,:] = 0
+    del dictionary[lookup[-1]]
+    del dictionary[lookup[-2]]
+    dictionary['<unk>'] = max_words-1
+    dictionary['<pad>'] = max_words-2
+    lookup[-1] = '<unk>'
+    lookup[-2] = '<pad>'
+
+    embed = nn.Embedding(embeddings.size(0), embeddings.size(1))
+    # Word embeddings are frozen.
+    embed.weight = nn.Parameter(embeddings, requires_grad=False)
+    return dictionary, lookup, embed
 
 
-def embed_words(dictionary, embeddings, words, out, unk_embedding=0, check=True):
-    '''Turn a tokenized sentence into a Tensor in-place.
+def tensorize(dataset, dictionary, length=30):
+    '''Turn a dataset into tensors.
+
+    Length of dataset might change (this function may drop rows),
+    but it will keep the rows between the outputs consistent.
+
+    Args:
+        dataset: iterable of tuples of (q1, q2, y)
+        dictionary: mapping from string to int (word embedding index)
+
+    Returns:
+        q1_tensor: torch.LongTensor with word ids.
+        q2_tensor: torch.LongTensor with word ids.
+        y_tensor: torch.ByteTensor of is_duplicate.
+    '''
+    def to_indices(words):
+        ql = [dictionary.get(w, dictionary['<unk>']) for w in words]
+        qv = np.ones(length, dtype=int) * dictionary['<pad>'] # all padding
+        qv[:len(ql)] = ql[:length] # set values
+        return qv
+
+    q1s = []
+    q2s = []
+    ys = []
+    for q1, q2, y in dataset:
+        q1 = to_indices(q1)
+        q2 = to_indices(q2)
+        if sum(q1) <= 0 or sum(q2) <= 0:
+            continue # Completely invalid sentence; reject
+        q1s.append(q1)
+        q2s.append(q2)
+        ys.append(y)
+    q1s = torch.LongTensor(np.stack(q1s, axis=0))
+    q2s = torch.LongTensor(np.stack(q2s, axis=0))
+    ys = torch.ByteTensor(ys)
+
+    return q1s, q2s, ys
+
+
+def convert_tfidf_vectorizer(tfidf, lookup, missing_weight=0.1):
+    '''Converts a TfIdfVectorizer into a torch.nn.Embedding.
     
     Args:
-        dictionary: Python dict mapping word to row id.
-        embeddings: A ?xD Tensor containing the word embeddings.
-        words: List of strings of length L.
-        out: An LxD tensor. Values will be written into this Tensor.
-        unk_embedding: Value to enter if word is unknown.
-        check: Do extra correctness checks in the input.
+        tfidf: TfIdfVectorizer. Must be unnormalized (made with norm=None)
+        lookup: list of words in embedding index.
+        missing_weight: what weight ot put in when word is not in the
+            tfidf vocabulary.
         
     Returns:
-        words: int value, number of known words.'''
-    if check:
-        assert embeddings.size(1) == out.size(1)
-        assert out.size(0) == len(words)
-        assert len(embeddings.size()) == 2  # 2D Tensor ?xD
-        assert len(out.size()) == 2  # 2D Tensor LxD
-        assert len(words) > 0
-
-    known_words = 0
-    for i, w in enumerate(words):
-        if w in dictionary:
-            out[i,:] = embeddings[dictionary[w],:]
-            known_words += 1
+        tfidf_embed: nn.Embedding form word embedding size to 1.'''
+    values = []
+    for w in lookup:
+        if w in tfidf.vocabulary_:
+            sentence_sparse = tfidf.transform([w])
+            values.append(max(sentence_sparse.max(), missing_weight))
         else:
-            out[i,:] = unk_embedding
-    return known_words
+            values.append(missing_weight)
+    embeddings = np.stack(values, axis=0).reshape(-1, 1)
+    embed = nn.Embedding(len(lookup), 1)
+    # tfidf embeddings are frozen.
+    embed.weight = nn.Parameter(
+            torch.from_numpy(embeddings).float(), requires_grad=False)
+    return embed
 
 
-def get_reweighted_embeddings(
-        tfidf, dictionary, embeddings, sentence, out, check=True):
+def get_reweighted_embeddings(tfidf, embeddings, sentence):
     '''Gets word vectors for the sentence reweighted using tf-idf.
 
-    The sentences are vectorized, so the length of the embedding is probably
-    less than 
-
-    the 'out' matrix gets filled with one word each time, and must be able to
-    fit the unique words of the sentence. Not all rows of the matrix will be
-    filled out.
-
     Args:
-        tfidf: pretrained TfIdfVectorizer
-        dictionary: a Python dict from word string to row number
-        embeddings: a ?xD torch.Tensor containing the embeddings
-        sentence: list of words to vectorize of length L.
-        out: Tensor size unique(L)xD, where to store the sentence vectors.
-             The size of dim2 must be exactly D, but dim1 just needs to be big
-             enough to contain the row.
-        check: if True, do argument checking.
-
-    Returns:
-        words: How many rows in `out` are filled out.'''
-    if check:
-        assert embeddings.size(1) == out.size(1)
-        assert out.size(0) >= 1
-        assert len(embeddings.size()) == 2  # 2D Tensor ?xD
-        assert len(out.size()) == 2  # 2D Tensor LxD
-        assert len(sentence) > 0
-
-    unique_words = set(filter(lambda w: w in dictionary, sentence))
-    if len(unique_words) == 0:
-        return 0
-    weights = tfidf.transform([' '.join(sentence)])
-    nonzero_weights = set(weights.indices)
-    words = 0
-    for w in unique_words:
-        dict_w = tfidf.vocabulary_.get(w)
-        if dict_w is None or dict_w not in nonzero_weights:
-            continue
-        tfidf_weight = weights[0, dict_w]
-        out[words,:] = tfidf_weight * embeddings[dictionary[w],:]
-        words += 1
-    return words
-
-
-def vectorize(
-        dictionary, embeddings, dataset,
-        q1_tensor, q2_tensor, tf=None, max_word_len=30):
-    '''Compute tf-idf vectors for each word for each sentence in the dataset.
-
-    Args:
-        dataset: a list of triplets of (q1, q2, y). q1/q2 are lists of words.
-        dictionary: a Python dict from word string to row number
-        embeddings: a ?xD torch.Tensor containing the word embeddings
-        q1_tensor: big tensor to hold values for q1.
-        q2_tensor: big tensor to hold values for q2.
-        tf: TfIdfVectorizer (optional)
-        max_word_len: maximum length of sentences (default 30).
-
-    Returns:
-        vectorized: a list of triplets (q1, q2, y). q1/q2 are tensors backed
-                    by the big q1_tensor and q2_tensors.
+        tfidf: nn.Embedding (1) - TF-IDF weights for each word.
+        embeddings: nn.Embedding (D) - Word embeddings.
+        sentence: Batch x Len LongTensor, with word ids.
     '''
-    assert len(dataset) <= q1_tensor.size(0)
-    assert len(dataset) <= q2_tensor.size(0)
-    assert max_word_len <= q1_tensor.size(1)
-    assert max_word_len <= q2_tensor.size(1)
-    assert embeddings.size(1) == q1_tensor.size(2)
-    assert embeddings.size(1) == q2_tensor.size(2)
-    assert len(embeddings.size()) == 2  # 2D Tensor ?xD
-    assert len(q1_tensor.size()) == 3
-    assert len(q2_tensor.size()) == 3
+    emb_words = embeddings(sentence)
+    emb_weights = tfidf(sentence)
+    return emb_words * emb_weights.repeat(1, 1, emb_words.size(2))
 
-    embed_command = lambda sentence, tensor: embed_words(
-            dictionary, embeddings, sentence, tensor, check=False)
-    if tf is not None:
-        embed_command = lambda sentence, tensor: get_reweighted_embeddings(
-                tf, dictionary, embeddings, sentence, tensor)
-
-    vectorized = []
-    for i, (q1, q2, y) in enumerate(dataset):
-        if i % 2000 == 0 and i > 0:
-            logger.info('vectorizing: %d examples processed', i)
-        q1_words = embed_command(q1[:max_word_len], q1_tensor[i])
-        q2_words = embed_command(q2[:max_word_len], q2_tensor[i])
-        if q1_words == 0 or q2_words == 0:
-            vectorized.append((None, None, y)) # To make the indices match.
-        else:
-            vectorized.append((
-                q1_tensor[i,:q1_words,:],
-                q2_tensor[i,:q2_words,:],
-                y))
-    return vectorized
 
 
 def load_tokenized(path):

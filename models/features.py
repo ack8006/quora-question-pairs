@@ -2,9 +2,47 @@
 
 import numpy as np
 import torch
+from torch import nn
+from torch.autograd import Variable
+import torch.nn.functional as F
 import logging
 
 logger = logging.getLogger('features')
+
+
+class Permute(nn.Module):
+    def __init__(self, sentence_length=30,
+            n_trials=2000, power=0.1, differentiable=False):
+        super(Permute, self).__init__()
+        self.n_trials = n_trials
+        self.seq_len = sentence_length
+        self.power = power
+        self.differentiable = differentiable
+
+    def forward(self, q1, q2):
+        mean_q1 = q1.mean(dim=1)
+        mean_q2 = q2.mean(dim=1)
+        mean_dist = (mean_q1 - mean_q2).abs()
+
+        q1q2 = torch.cat([q1, q2], 1) # B x W x D
+
+        permutation = torch.FloatTensor(
+            self.n_trials, 2 * self.seq_len).fill_(0) # N x W
+
+        for trial in xrange(self.n_trials):
+            y = torch.randperm(2 * self.seq_len)
+            permutation[trial][y[:self.seq_len]] = 1.0 / self.seq_len
+            permutation[trial][y[self.seq_len:]] = -1.0 / self.seq_len
+        permutation = Variable(permutation).unsqueeze(0) # 1 x N x W
+        prep = permutation.repeat(q1q2.size(0), 1, 1) # B x N X W
+        trial_means = torch.bmm(prep, q1q2).abs() # B x N x D
+
+        diffs = trial_means - mean_dist.repeat(1, self.n_trials, 1)
+        if self.differentiable:
+            return permutation, F.relu(diffs).pow(self.power).mean(dim=1).squeeze()
+        else:
+            return permutation, (diffs > 0).float().mean(dim=1).squeeze()
+
 
 
 def permute(dataset, embed_size=100, max_word_len=30, n_trials=2000, distance='squared'):
