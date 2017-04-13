@@ -223,14 +223,14 @@ def main():
         for ind, (qs, duplicate) in enumerate(train_loader2):
             duplicate = Variable(duplicate)
             model.eval()
-            out = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
+            out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
             pred = out.data.numpy().argmax(axis=1)
             train_acc = np.mean(pred == duplicate.data.numpy())      
 
         for ind, (qs, duplicate) in enumerate(valid_loader):
             duplicate = Variable(duplicate)
             model.eval()
-            out = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
+            out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
             pred = out.data.numpy().argmax(axis=1)
             acc = np.mean(pred == duplicate.data.numpy())
 
