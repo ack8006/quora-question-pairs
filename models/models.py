@@ -153,18 +153,25 @@ class EmbeddingAutoencoder(nn.Module):
         - The other one makes sure that sentence duplicates are embedded
           closely together.
     '''
-    def __init__(self, word_embedding, bilstm_encoder, bilstm_decoder, fc_decoder):
+    def __init__(self, word_embedding, bilstm_encoder, bilstm_decoder,
+            dropout=0.0, glove=None)
         '''Args:
             word_embedding: nn.Embedding - Word IDs to embeddings
             bilstm_encoder: BiLSTM - Sequence to hidden state
             bilstm_decoder: BiLSTM - Hidden state to sequence of hidden states
-            fc_decoder: nn.Linear - Turns hidden states back to word probability
+            dropout: Float value that controls dropout aggressiveness.
+            glove: Tensor containing GloVE vectors for init. Can be None.
         Dimensions must agree with each other.
         '''
+        super(EmbeddingAutoencoder, self).__init__()
+        self.drop = nn.Dropout(dropout)
         self.word_embedding = word_embedding
         self.bilstm_encoder = bilstm_encoder
         self.bilstm_decoder = bilstm_decoder
-        self.fc_decoder = fc_decoder
+        # Times 2 because of bidirectional.
+        self.fc_decoder = FC(self.bilstm_decoder.lstm.hidden_size
+                * 2 * self.bilstm_decoder.lstm.num_layers,
+                self.word_embedding.embedding_dim, dropout)
 
         assert self.word_embedding.embedding_dim == \
             self.bilstm_encoder.lstm.input_size
@@ -231,7 +238,7 @@ class EmbeddingAutoencoder(nn.Module):
         '''Args:
             X1: B x Seq_Len x D word embeddings
         Returns:
-            auto_X1: autoencoded X1 (B x Seq_Len) LongTensor Variable
+            auto_X1: autoencoded X1 (B x Seq_Len x W) log-probabilities
             dist: pairwise distances between X1 and X2 FloatTensor Variable
                   of size B x B'''
 

@@ -17,7 +17,7 @@ import nltk
 nltk.download('punkt')
 from nltk.tokenize import word_tokenize
 
-from models import LSTMModel
+from models import BiLSTM, EmbeddingAutoencoder
 
 
 
@@ -102,8 +102,26 @@ def get_glove_embeddings(file_path, corpus, ntoken, nemb):
     return embeddings
 
 
+def distance_loss(dist, duplicate_matrix):
+    '''Args:
+        dist: B*(B-1)/2 sized array of differences.
+        duplicate_matrix: B*B array of is_duplicates.'''
+    B = duplicate_matrix.size(0)
+    duplicates = torch.FloatTensor(dist.size()) # 0/1 tensor of is_duplicate
+    current = 0
+    for row in range(B-1):
+        start = row + 1 # For B=4,row1 (2nd): start from 2 (1,2),(1,3)
+        num = B - start # How many distances to compare
+        duplicates[current:current+num] = duplicate_matrix[row][start:]
+        current += num
+
+    positive_diff = (dist * duplicates).mean() # Duplicates should be close
+    negative_diff = (dist * (1 - duplicates)).mean() # Non-duplicates far
+    return positive_diff - negative_diff
+
+
 def main():
-    parser = argparse.ArgumentParser(description='PyTorch PennTreeBank RNN/LSTM Language Model')
+    parser = argparse.ArgumentParser(description='PyTorch Quora RNN/LSTM Language Model')
     parser.add_argument('--data', type=str, default='../data/train.csv',
                         help='location of the data corpus')
     parser.add_argument('--glovedata', type=str, default='../data/glove.6B',
@@ -150,8 +168,8 @@ def main():
                         help='path to save the final model')
     args = parser.parse_args()
 
-
-    X, y, X_val, y_val, q_field = load_data(args.data, args.din, args.vocabsize, args.cuda, train_split=0.8)
+    X, y, X_val, y_val, q_field = load_data(
+            args.data, args.din, args.vocabsize, args.cuda, train_split=0.8)
 
     print('Generating Data Loaders')
     #X.size len(train_data),1,2,fix_length
@@ -159,12 +177,6 @@ def main():
     train_loader = DataLoader(train_dataset, 
                                 batch_size=args.batchsize, 
                                 shuffle=True)
-    train_loader2 = DataLoader(train_dataset,
-                                batch_size = len(X),
-                                shuffle=False)
-    valid_loader = DataLoader(TensorDataset(X_val, y_val),
-                                batch_size=len(X_val),
-                                shuffle=False)
 
 
     ntokens = len(q_field.vocab.itos)
@@ -174,22 +186,23 @@ def main():
         assert args.demb in (50, 100, 200, 300)
         glove_embeddings = get_glove_embeddings(args.glovedata, q_field.vocab.stoi, ntokens, args.demb)
     
-
-    model = LSTMModel(args.din, args.dhid, args.nlayers, args.dout, args.demb, args.vocabsize, 
-                        args.dropout, args.embinit, args.hidinit, args.decinit, glove_embeddings,
-                        args.freezeemb)
+    embedding = nn.Embedding(args.vocabsize, args.demb)
+    if args.embinit == 'glove':
+        embedding.weight.data = glove_embeddings
+    bilstm_encoder = BiLSTM(args.demb, args.dhid, args.nlayers, args.dropout)
+    bilstm_decoder = BiLSTM(args.dhid, args.dhid, args.nlayers, args.dropout)
+    model = EmbeddingAutoencoder(embedding, bilstm_encoder, bilstm_decoder)
 
     if args.cuda:
         model.cuda()
 
-    criterion = nn.CrossEntropyLoss()
+    reconstruction_loss = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, 
-                        args.embinit, args.freezeemb, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize)])
-
-    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | FreezeEmb | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize')
-    print(model_config)
+    # model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, 
+    #                     args.embinit, args.freezeemb, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize)])
+    # print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | FreezeEmb | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize')
+    # print(model_config)
 
     for epoch in range(args.epochs):
         model.train()
@@ -198,8 +211,17 @@ def main():
             start_time = time.time()
             duplicate = Variable(duplicate)
             model.zero_grad()
-            pred = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
-            loss = criterion(pred, duplicate)
+
+            # TODO: input
+            # TODO: X
+            # TODO: duplicate_matrix
+
+            # RUN THE MODEL FOR THIS BATCH.
+            auto, dist = model(X)
+            loss = reconstruction_loss(
+                    auto.view(-1, args.vocabsize), input.view(-1))
+            loss += distance_loss(dist, duplicate_matrix)
+
             loss.backward()
             clip_grad_norm(model.parameters(), args.clip)
 
@@ -219,24 +241,12 @@ def main():
                             epoch, ind, len(X) // args.batchsize,
                             elapsed * 1000.0 / args.loginterval, cur_loss))
 
-        train_acc = 0
-        for ind, (qs, duplicate) in enumerate(train_loader2):
-            duplicate = Variable(duplicate)
-            model.eval()
-            out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
-            pred = out.data.numpy().argmax(axis=1)
-            train_acc = np.mean(pred == duplicate.data.numpy())      
-
-        for ind, (qs, duplicate) in enumerate(valid_loader):
-            duplicate = Variable(duplicate)
-            model.eval()
-            out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
-            pred = out.data.numpy().argmax(axis=1)
-            acc = np.mean(pred == duplicate.data.numpy())
-
-            print('Epoch: {} | Train Loss: {:.4f} | Train Accuracy: {:.4f} | Val Accuracy: {:.4f}'.format(
+            print('Epoch: {} | Train Loss: {:.4f}'.format(
                 epoch, total_cost, train_acc, acc))
         print('-' * 89)
+
+    with open('autoencoder.pt', 'wb') as f:
+        torch.save(model, f)
 
 
 if __name__ == '__main__':
