@@ -233,7 +233,7 @@ def main():
             # duplicate = Variable(duplicate)
             model.eval()
             out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
-            pred = out.data.numpy().argmax(axis=1)
+            pred = out.data.cpu().numpy().argmax(axis=1)
             train_correct += np.sum(pred == duplicate.cpu().numpy())   
             train_total += len(pred)
         train_acc = train_correct / train_total 
@@ -246,7 +246,7 @@ def main():
             # duplicate = Variable(duplicate)
             model.eval()
             out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
-            pred = out.data.numpy().argmax(axis=1)
+            pred = out.data.cpu().numpy().argmax(axis=1)
             val_correct += np.sum(pred == duplicate.cpu().numpy())
             val_total += len(pred)
         acc = val_correct/val_total
