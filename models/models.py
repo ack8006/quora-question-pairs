@@ -225,7 +225,6 @@ class EmbeddingAutoencoder(nn.Module):
             dist: B x B matrix. Cell (i, j) is p(j|i) according to some
                   likelihood function on pairs of data points.'''
         B = emb.size(0)
-        emb = self.batchnorm(emb)
         dists = Variable(torch.FloatTensor(B, B))
         for row in range(B):
             diff = emb - emb[row].unsqueeze(0).repeat(B, 1) # B x H
