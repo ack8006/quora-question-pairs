@@ -225,6 +225,9 @@ def main():
 
         train_acc = 0
         for ind, (qs, duplicate) in enumerate(train_loader2):
+            if args.cuda:
+                qs = qs.cuda()
+                duplicate = duplicate.cuda()
             duplicate = Variable(duplicate)
             model.eval()
             out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
@@ -232,6 +235,9 @@ def main():
             train_acc = np.mean(pred == duplicate.data.numpy())      
 
         for ind, (qs, duplicate) in enumerate(valid_loader):
+            if args.cuda:
+                qs = qs.cuda()
+                duplicate = duplicate.cuda()
             duplicate = Variable(duplicate)
             model.eval()
             out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())

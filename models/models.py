@@ -68,12 +68,12 @@ class BiLSTM(nn.Module):
 
 class LSTMModel(nn.Module):
     def __init__(self, d_in, d_hid, n_layers, d_out, d_emb, vocab, dropout,
-                    emb_init, hid_init, dec_init, glove_emb, freeze_emb, cuda):
+                    emb_init, hid_init, dec_init, glove_emb, freeze_emb, is_cuda):
         super(LSTMModel, self).__init__()
 
         self.d_hid = d_hid
         self.n_layers = n_layers
-        self.cuda = cuda
+        self.is_cuda = is_cuda
 
         self.drop = nn.Dropout(dropout)
 
@@ -141,7 +141,7 @@ class LSTMModel(nn.Module):
 
 
     def init_hidden(self, batch_size):
-        if self.cuda:
+        if self.is_cuda:
             return (Variable(torch.zeros(self.n_layers * 2, batch_size, self.d_hid).cuda()), 
                     Variable(torch.zeros(self.n_layers * 2, batch_size, self.d_hid).cuda()))
         else:
