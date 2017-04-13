@@ -273,9 +273,9 @@ def main():
             if ind % args.loginterval == 0 and ind > 0:
                 cur_loss = total_cost / (ind * args.batchsize)
                 elapsed = time.time() - start_time
-                print('Epoch {} | {:5d}/inf Batches | ms/batch {:5.2f} | '
+                print('Epoch {} | {:5d}/{} Batches | ms/batch {:5.2f} | '
                         'Recent loss {:.6f}'.format(
-                            epoch, ind, len(qid) // args.batchsize,
+                            eid, ind, len(qid) // args.batchsize,
                             elapsed * 1000.0 / args.loginterval, cur_loss))
 
     print('-' * 89)
