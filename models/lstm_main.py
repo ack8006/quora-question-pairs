@@ -194,8 +194,8 @@ def main():
     for epoch in range(args.epochs):
         model.train()
         total_cost = 0
+        start_time = time.time()
         for ind, (qs, duplicate) in enumerate(train_loader):
-            start_time = time.time()
             if args.cuda:
                 qs = qs.cuda()
                 duplicate = duplicate.cuda()
@@ -222,14 +222,13 @@ def main():
                         'Loss {:.6f}'.format(
                             epoch, ind, len(X) // args.batchsize,
                             elapsed * 1000.0 / args.loginterval, cur_loss))
+                start_time = time.time()
 
+        model.eval()
         train_correct, train_total = 0, 0
         for ind, (qs, duplicate) in enumerate(train_loader):
             if args.cuda:
                 qs = qs.cuda()
-                # duplicate = duplicate.cuda()
-            # duplicate = Variable(duplicate)
-            model.eval()
             out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
             pred = out.data.cpu().numpy().argmax(axis=1)
             train_correct += np.sum(pred == duplicate.cpu().numpy())   
@@ -240,9 +239,6 @@ def main():
         for ind, (qs, duplicate) in enumerate(valid_loader):
             if args.cuda:
                 qs = qs.cuda()
-            #     duplicate = duplicate.cuda()
-            # duplicate = Variable(duplicate)
-            model.eval()
             out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
             pred = out.data.cpu().numpy().argmax(axis=1)
             val_correct += np.sum(pred == duplicate.cpu().numpy())
