@@ -21,35 +21,13 @@ from models import LSTMModel
 
 
 
-<<<<<<< HEAD
 def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.90):
-=======
-# data_path = '../data/train.csv'
-# d_in = 30
-# d_emb = 50
-# cuda = False
-# batch_size = 20
-# epochs = 20
-# d_out = 2
-# d_hid = 50
-# n_layers = 1
-# optimizer = True
-# lr = 0.05
-# dropout = 0.0
-# clip = 0.25
-# vocab_size = 20000
-# cuda = False
-# log_interval = 200
-
-
-def load_data(data_path, d_in, vocab_size, cuda, train_split=0.80):
->>>>>>> 7096766efe931dd892c980c5470983149883b5dc
     print('Loading Data')
     train_data = pd.read_csv(data_path)
-    val_data = train_data.iloc[int(len(train_data)*train_split):]
-    train_data = train_data.iloc[:int(len(train_data)*train_split)]
-    # val_data = train_data.iloc[1000:1100]
-    # train_data = train_data.iloc[:1000]
+    # val_data = train_data.iloc[int(len(train_data)*train_split):]
+    # train_data = train_data.iloc[:int(len(train_data)*train_split)]
+    val_data = train_data.iloc[1000:1100]
+    train_data = train_data.iloc[:1000]
 
 
     print('Cleaning and Tokenizing')
@@ -207,13 +185,7 @@ def main():
                 duplicate = duplicate.cuda()
             duplicate = Variable(duplicate)
             model.zero_grad()
-<<<<<<< HEAD
             pred = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
-            # pred = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
-=======
-
-            pred = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
->>>>>>> 7096766efe931dd892c980c5470983149883b5dc
             loss = criterion(pred, duplicate)
             loss.backward()
             clip_grad_norm(model.parameters(), args.clip)
@@ -236,46 +208,28 @@ def main():
                             elapsed * 1000.0 / args.loginterval, cur_loss))
                 start_time = time.time()
 
-<<<<<<< HEAD
-        train_acc = 0
-        for ind, (qs, duplicate) in enumerate(train_loader2):
-            duplicate = Variable(duplicate)
-            model.eval()
-            out = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
-            # out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
-            pred = out.data.numpy().argmax(axis=1)
-            train_acc = np.mean(pred == duplicate.data.numpy())      
-=======
         model.eval()
         train_correct, train_total = 0, 0
         for ind, (qs, duplicate) in enumerate(train_loader):
             if args.cuda:
                 qs = qs.cuda()
-            out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
+            out = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
+            # out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
             pred = out.data.cpu().numpy().argmax(axis=1)
             train_correct += np.sum(pred == duplicate.cpu().numpy())   
             train_total += len(pred)
         train_acc = train_correct / train_total 
->>>>>>> 7096766efe931dd892c980c5470983149883b5dc
 
         val_correct, val_total = 0, 0
         for ind, (qs, duplicate) in enumerate(valid_loader):
-<<<<<<< HEAD
-            duplicate = Variable(duplicate)
-            model.eval()
-            out = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
-            # out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
-            pred = out.data.numpy().argmax(axis=1)
-            acc = np.mean(pred == duplicate.data.numpy())
-=======
             if args.cuda:
                 qs = qs.cuda()
-            out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
+            out = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
+            # out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
             pred = out.data.cpu().numpy().argmax(axis=1)
             val_correct += np.sum(pred == duplicate.cpu().numpy())
             val_total += len(pred)
         acc = val_correct/val_total
->>>>>>> 7096766efe931dd892c980c5470983149883b5dc
 
         print('Epoch: {} | Train Loss: {:.4f} | Train Accuracy: {:.4f} | Val Accuracy: {:.4f}'.format(
             epoch, total_cost, train_acc, acc))
