@@ -11,7 +11,9 @@ logger = logging.getLogger('features')
 
 
 class Permute(nn.Module):
-    def __init__(self, out_features, sentence_length=30,
+    '''Computes permutation test p-values between two bags of words.'''
+
+    def __init__(self, out_features=100, sentence_length=30,
             n_trials=2000, power=0.1, differentiable=False):
         super(Permute, self).__init__()
         self.n_trials = n_trials
@@ -19,18 +21,20 @@ class Permute(nn.Module):
         self.power = power
         self.differentiable = differentiable
         # Only used in differentiable mode. Correction term.
-        self.bias = Parameter(torch.Tensor(out_features))
+        self.bias = nn.Parameter(torch.Tensor(out_features))
 
     def reset_parameters(self):
 	self.bias.data.fill_(0)
 
     def forward(self, q1, q2):
+        '''Args:
+            q1: B x sentence_length x embed_size Tensor. Word embeddings.
+            q2: B x sentence_length x embed_size Tensor. Word embeddings.'''
         mean_q1 = q1.mean(dim=1)
         mean_q2 = q2.mean(dim=1)
         mean_dist = (mean_q1 - mean_q2).abs()
 
         q1q2 = torch.cat([q1, q2], 1) # B x W x D
-
         permutation = torch.FloatTensor(
             self.n_trials, 2 * self.seq_len).fill_(0) # N x W
 
@@ -38,76 +42,96 @@ class Permute(nn.Module):
             y = torch.randperm(2 * self.seq_len)
             permutation[trial][y[:self.seq_len]] = 1.0 / self.seq_len
             permutation[trial][y[self.seq_len:]] = -1.0 / self.seq_len
+
         permutation = Variable(permutation).unsqueeze(0) # 1 x N x W
         prep = permutation.repeat(q1q2.size(0), 1, 1) # B x N X W
         trial_means = torch.bmm(prep, q1q2).abs() # B x N x D
 
         diffs = trial_means - mean_dist.repeat(1, self.n_trials, 1)
         if self.differentiable:
-            return permutation, F.relu(diffs).pow(self.power).mean(dim=1).squeeze() + self.bias
+            approx = F.relu(diffs).pow(self.power).mean(dim=1).squeeze()
+            biases = self.bias.unsqueeze(0).repeat(approx.size(0), 1)
+            return permutation, approx + biases
         else:
             return permutation, (diffs > 0).float().mean(dim=1).squeeze()
 
 
-
-def permute(dataset, embed_size=100, max_word_len=30, n_trials=2000, distance='squared'):
-    '''Compute permutation test p-value features.
+def elementwise_mean_stdev(sentence, base_std=0.001):
+    '''Gets the mean and variance of the sentence(s), viewed as a bag of words.
+    Mean and variance is computed for each element independently.
 
     Args:
-        dataset: a list of triplets (q1, q2, y). q1/q2 are tensors backed
-                 by the big q1_tensor and q2_tensors.
+        sentence: Batch x sequence_length x Dim
+        base_std: constant value added to stdev for numerical stability.
 
     Returns:
-        features: a NxD tensor with the features.
+        mean: Variable (Batch x Dim)
+        stdev: Variable (Batch x Dim)
     '''
-    perm = torch.zeros((n_trials, 2 * max_word_len))
-    invperm = torch.zeros((n_trials, 2 * max_word_len))
-    hold = torch.zeros((2 * max_word_len, embed_size))
-    out = torch.zeros((len(dataset), embed_size))
+    mean = sentence.mean(dim=1) # Batch x 1 x Dim
+    diff = (sentence - mean.repeat(1, sentence.size(1), 1))
+    stdev =diff.pow(2).mean(dim=1).sqrt() + base_std
+    return mean.squeeze(), stdev.squeeze()
 
-    def faster_distance(diff):
-        if distance == 'squared':
-            diff.pow_(2)
-        else:
-            diff.abs_()
-   
-    permute_q1_result = torch.zeros((n_trials, embed_size))
-    base_dist_q1 = torch.zeros(embed_size)
-    base_meaner_ = torch.zeros((1, 2 * max_word_len))
 
-    for i, (q1, q2, y) in enumerate(dataset):
-        if q1 is None or q2 is None:
-            continue
-        len_q1 = q1.size(0)
-        len_q2 = q2.size(0)
+def elementwise_kl_div(p, q):
+    '''Elementwise kl-div between the two sentences.
+    
+    Args:
+        p: samples from the "true" distribution.
+        q: samples from the approximation.'''
 
-        sum_len = len_q1 + len_q2
-        perm.fill_(0)
-        invperm.fill_(1)
+    mu1, sig1 = elementwise_mean_stdev(p)
+    mu2, sig2 = elementwise_mean_stdev(q)
 
-        # Get views for the common matrices.
-        base_meaner = base_meaner_[:,:sum_len]
-        permutations = perm[:,:sum_len]
-        words = hold[:sum_len,:]
-        words[:len_q1] = q1
-        base_meaner[0,:len_q1] = 1.0 / len_q1
-        words[len_q1:] = q2
-        base_meaner[0,len_q1:sum_len] = -1.0 / len_q2
+    return (sig2 / sig1).log() + \
+            (sig1.pow(2) + (mu1 - mu2).pow(2)) / \
+            (2 * sig2.pow(2)) - 0.5
 
-        # Compare distances against this.
-        torch.mm(base_meaner, words, out=base_dist_q1)
-        faster_distance(base_dist_q1)
 
-        for trial in xrange(n_trials):
-            y = torch.randperm(sum_len)
-            permutations[trial][y[:len_q1]] = 1.0 / len_q1
-            permutations[trial][y[len_q1:]] = -1.0 / len_q2
+def symmetric_kl_div(q1, q2):
+    '''Calculates KLD between treating the sentences as different and as
+    the same distributions.'''
 
-        # Calc trials.
-        torch.mm(permutations, words, out=permute_q1_result) # trials X embed
-        faster_distance(permute_q1_result)
-        out[i] = (permute_q1_result - base_dist_q1.repeat(n_trials, 1)).ceil().clamp(0, 1).mean(dim=0)
+    combine = torch.cat([q1, q2], 1)
+    lq1, lq2 = q1.size(1), q2.size(1)
+    len_all = 1.0 * (lq1 + lq2)
+    klq1 = elementwise_kl_div(q1, combine)
+    klq2 = elementwise_kl_div(q2, combine)
+    return (lq1 / len_all) * klq1 + (lq2 / len_all) * klq2
 
-    return out
+
+def apply(q1, q2, module, batchsize=50, print_every=None):
+    '''Compute permutation test p-value features in batches.
+
+    Args:
+        q1: Question 1 vectors
+        q2: Question 2 vectors
+        module: Module to apply
+        bathsize: How many sentences to do each time
+
+    Returns:
+        diffs: a NxD tensor with the features.
+    '''
+    n_examples = q1.size(0)
+    n_batches = n_examples / batchsize + 1
+
+    n_return = q1.size(2)
+    data = torch.zeros(n_examples, n_return)
+
+    for batch in range(n_batches):
+        if print_every and batch % print_every == 0:
+            print(batch)
+        start = batchsize * batch
+        end = batchsize * (batch + 1)
+        if start >= n_examples:
+            break
+        q1b = q1[start:end]
+        q2b = q2[start:end]
+
+        module_result = module(q1b, q2b)
+        data[start:end] = module(q1b, q2b).data
+
+    return Variable(data)
 
 
