@@ -177,7 +177,7 @@ def main():
 
     model = LSTMModel(args.din, args.dhid, args.nlayers, args.dout, args.demb, args.vocabsize, 
                         args.dropout, args.embinit, args.hidinit, args.decinit, glove_embeddings,
-                        args.freezeemb)
+                        args.freezeemb, args.cuda)
 
     if args.cuda:
         model.cuda()
@@ -199,8 +199,6 @@ def main():
             if args.cuda:
                 qs = qs.cuda()
                 duplicate = duplicate.cuda()
-            print('Batch Types: ', type(qs), type(duplicate))
-            print(type(qs[:, 0, 0, :]), type(qs[:, 0, 0, :].long()))
             duplicate = Variable(duplicate)
             model.zero_grad()
 
