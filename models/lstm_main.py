@@ -12,6 +12,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+import torch.nn.functional as F
 from torch.nn.utils import clip_grad_norm
 from torch.utils.data import TensorDataset, DataLoader
 
@@ -146,21 +147,19 @@ def generate(args, qids, questions):
 
 def distance_loss(dist, duplicate_matrix):
     '''Args:
-        dist: B*(B-1)/2 sized array of differences.
+        dist: B*B sized array of differences.
         duplicate_matrix: B*B array of is_duplicates.'''
     B = duplicate_matrix.size(0)
-    duplicates = torch.FloatTensor(dist.size()) # 0/1 tensor of is_duplicate
-    current = 0
-    for row in range(B-1):
-        start = row + 1 # For B=4,row1 (2nd): start from 2 (1,2),(1,3)
-        num = B - start # How many distances to compare
-        duplicates[current:current+num] = duplicate_matrix[row][start:]
-        current += num
-    duplicates = Variable(duplicates)
+    duplicate_matrix = duplicate_matrix.float()
 
-    positive_diff = (dist * duplicates).mean() # Duplicates should be close
-    negative_diff = (dist * (1 - duplicates)).mean() # Non-duplicates far
-    return positive_diff - negative_diff
+    probability_dup = dist * duplicate_matrix + (1 - duplicate_matrix)
+    probability_non = dist * (1 - duplicate_matrix)
+
+    min_dup = probability_dup.min(dim=1)[0]
+    max_non = probability_non.max(dim=1)[0]
+
+    # Hinge loss between lest likely duplicate and most likely non-duplicate.
+    return F.relu(1 + max_non - min_dup).mean()
 
 
 def main():
@@ -247,17 +246,18 @@ def main():
             input = Variable(input)
             model.zero_grad()
 
+            # RUN THE MODEL FOR THIS BATCH.
+            auto, prob = model(input)
+            rloss = reconstruction_loss(
+                    auto.view(-1, args.vocabsize), input.view(-1))
+            dloss = distance_loss(prob, Variable(duplicate_matrix))
+            loss = rloss + dloss
+
             if first_batch:
                 print(input)
                 print(duplicate_matrix)
+                print(prob)
                 first_batch = False
-
-            # RUN THE MODEL FOR THIS BATCH.
-            auto, dist = model(input)
-            rloss = reconstruction_loss(
-                    auto.view(-1, args.vocabsize), input.view(-1))
-            dloss = distance_loss(dist, duplicate_matrix)
-            loss = rloss + dloss
 
             loss.backward()
             clip_grad_norm(model.parameters(), args.clip)

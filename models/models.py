@@ -172,6 +172,9 @@ class EmbeddingAutoencoder(nn.Module):
         self.fc_decoder = FC(self.bilstm_decoder.lstm.hidden_size
                 * 2 * self.bilstm_decoder.lstm.num_layers,
                 self.word_embedding.num_embeddings, dropout)
+        self.batchnorm = nn.BatchNorm1d(
+                2 * self.bilstm_encoder.lstm.num_layers *
+                self.bilstm_encoder.lstm.hidden_size)
 
         assert self.word_embedding.embedding_dim == \
             self.bilstm_encoder.lstm.input_size
@@ -215,25 +218,20 @@ class EmbeddingAutoencoder(nn.Module):
         # B x S x D
         return torch.stack(words, dim=1)
 
-    def distances(self, emb):
+    def pair_probabilities(self, emb):
         '''Args:
             emb1: B x H embeddings
         Returns:
-            dist: pairwise distances in a 1D tensor, that comes from the
-                  right triangular distance matrix.'''
+            dist: B x B matrix. Cell (i, j) is p(j|i) according to some
+                  likelihood function on pairs of data points.'''
         B = emb.size(0)
-        # If B = 5, then dist will have 4+3+2+1 = 5*4/2 components
-        # If B = 4, then dist will have 3+2+1 = 4*3/2 components
-        d = B*(B-1)/2
-        dists = Variable(torch.FloatTensor(d))
-        current = 0
-        for row in range(B-1): # For B=5, go through rows 0,1,2,3 (skip 4)
-            start = row + 1 # For B=4,row1 (2nd): start from 2 (1,2),(1,3)
-            num = B - start # How many distances to compare
-            diff = emb[start:] - emb[row].unsqueeze(0).repeat(num, 1)
-            dist = (diff * diff).sum(dim=1)
-            dists[current:current+num] = dist
-            current += num
+        emb = self.batchnorm(emb)
+        dists = Variable(torch.FloatTensor(B, B))
+        for row in range(B):
+            diff = emb - emb[row].unsqueeze(0).repeat(B, 1) # B x H
+            dist = (diff * diff).sum(dim=1) # B x 1
+            score = (-dist).exp() # Gaussian (ala SNE)
+            dists[row] = score / score.sum().repeat(B) # Columns sum to 1
         return dists
 
     def forward(self, X1):
@@ -241,14 +239,14 @@ class EmbeddingAutoencoder(nn.Module):
             X1: B x Seq_Len word tokens
         Returns:
             auto_X1: autoencoded X1 (B x Seq_Len x W) log-probabilities
-            dist: pairwise distances between X1 and X2 FloatTensor Variable
+            prob: pairwise probabilities between X1 and X2 FloatTensor Variable
                   of size B x B'''
 
         X1 = self.drop(self.word_embedding(X1))
         h1, emb1 = self.encoder(X1)
         auto_X1 = self.decoder(h1, X1)
-        dist = self.distances(emb1)
-        return auto_X1, dist
+        prob = self.pair_probabilities(emb1)
+        return auto_X1, prob
 
     def init_hidden(self, batch_size, lstm):
         layer_dir = lstm.num_layers * 2
