@@ -193,21 +193,23 @@ class EmbeddingAutoencoder(nn.Module):
         Returns:
             hid: 2N x B x D encoded sentence for each batch.
             flat: B x 2ND tensor same as hid, but flattened.'''
-        h0 = self.init_hidden(X.size(0))
+        h0 = self.init_hidden(X.size(0), self.bilstm_encoder.lstm)
         _, hid, _ = self.bilstm_encoder(X, h0) # Want only the hidden states.
         flat = torch.cat(torch.chunk(hid, hid.size(0)), 2)[0]
         return hid, flat
 
-    def decoder(self, h0, X):
+    def decoder(self, h, X):
         '''Run X through the decoder part. Args:
             h0: 2N x B x D hidden states from encoder.
             X: B x Seq_Len x D word embeddings of the correct answer.
         Returns:
             output: B x Seq_Len X D output class probabilities.'''
         # B x S x ND
+        h0 = self.init_hidden(X.size(0), self.bilstm_decoder.lstm)
+        h0 = (h, h0[1])
         out, _, _ = self.bilstm_decoder(X, h0)
         # S (B x ND)
-        words = [w.squeeze() for w in torch.chunk(hid, hid.size(0), dim=1)]
+        words = [w.squeeze() for w in torch.chunk(out, out.size(1), dim=1)]
         # S (B x D)
         words = [self.fc_decoder(w) for w in words]
         # B x S x D
@@ -228,7 +230,7 @@ class EmbeddingAutoencoder(nn.Module):
         for row in range(B-1): # For B=5, go through rows 0,1,2,3 (skip 4)
             start = row + 1 # For B=4,row1 (2nd): start from 2 (1,2),(1,3)
             num = B - start # How many distances to compare
-            diff = emb[start:] - emb[row].unsqueeze(0).repeat(num)
+            diff = emb[start:] - emb[row].unsqueeze(0).repeat(num, 1)
             dist = (diff * diff).sum(dim=1)
             dists[current:current+num] = dist
             current += num
@@ -248,7 +250,12 @@ class EmbeddingAutoencoder(nn.Module):
         dist = self.distances(emb1)
         return auto_X1, dist
 
-        
+    def init_hidden(self, batch_size, lstm):
+        layer_dir = lstm.num_layers * 2
+        d_hid = lstm.hidden_size
+        return (Variable(torch.zeros(layer_dir, batch_size, d_hid)), 
+                Variable(torch.zeros(layer_dir, batch_size, d_hid)))
+
 
 
 

@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import sys
 
 import argparse
@@ -57,10 +59,17 @@ def clean_and_tokenize(args, train_data, dictionary):
 
     qids = []
     qs = []
+    processed = 0
+    print('Reading max:', args.max_sentences)
     for example in train_data.itertuples():
+        if processed % 10000 == 0:
+            print('processed {0}'.format(processed))
+        if processed > args.max_sentences:
+            break
         tokens = nlp(example.question, parse=False)
         qids.append(example.qid)
         qs.append(to_indices(tokens))
+        processed += 1
     qst = torch.LongTensor(np.stack(qs, axis=0))
     qidst = torch.LongTensor(qids)
     return qidst, qst
@@ -81,10 +90,18 @@ def load_glove(args):
 
 
 def generate(args, qids, questions):
+    print(qids[:6])
+    print(questions[:6])
     duplicates = pd.read_csv(args.duplicates)
-    data.columns = ['qid1', 'qid2']
+    duplicates.columns = ['qid1', 'qid2']
+
     # What duplicates are available.
-    duplist = list((t.qid1, t.qid2) for t in duplicates.itertuples())
+    all_qids = list(qids)
+    set_qids = set(qids)
+    duplist = ((t.qid1, t.qid2) for t in duplicates.itertuples())
+    duplist = filter(lambda (q1, q2): q1 in set_qids and q2 in set_qids, duplist)
+    print('{0} possible dupes'.format(len(duplist)))
+
     # Is (q1, q2) a duplicate.
     dupset = set(duplist)
     # For q1, what are its duplicates.
@@ -106,7 +123,7 @@ def generate(args, qids, questions):
             # Flatten those IDs to a list.
             dups_for_id = list(x for t in matching_duplicates for x in t)
 
-            batch = (id_select + dups_for_id)
+            batch = (seed_ids + dups_for_id)
             np.random.shuffle(batch)
             batch = batch[:args.batchsize]
             while len(batch) < args.batchsize:
@@ -119,7 +136,7 @@ def generate(args, qids, questions):
 
             # Yield input, duplicate matrix
             indices = [idx_lookup[qid] for qid in batch]
-            yield questions[indices], torch.ByteTensor(mtx)
+            yield questions[torch.LongTensor(indices)], torch.from_numpy(mtx)
 
     for e in range(args.epochs):
         seed_size = 5
@@ -138,6 +155,7 @@ def distance_loss(dist, duplicate_matrix):
         num = B - start # How many distances to compare
         duplicates[current:current+num] = duplicate_matrix[row][start:]
         current += num
+    duplicates = Variable(duplicates)
 
     positive_diff = (dist * duplicates).mean() # Duplicates should be close
     negative_diff = (dist * (1 - duplicates)).mean() # Non-duplicates far
@@ -152,6 +170,8 @@ def main():
                         help='location of the data corpus')
     parser.add_argument('--glovedata', type=str, default='../data/',
                         help='location of the pretrained glove embeddings')
+    parser.add_argument('--max_sentences', type=int, default=1000000,
+                        help='max num of sentences to train on')
     parser.add_argument('--din', type=int, default=30,
                         help='length of LSTM')
     parser.add_argument('--demb', type=int, default=100,
@@ -206,7 +226,9 @@ def main():
         model.cuda()
 
     reconstruction_loss = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(
+            [param for param in model.parameters()
+                if param.requires_grad], lr=args.lr)
 
     # model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, 
     #                     args.embinit, args.freezeemb, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize)])
@@ -216,11 +238,18 @@ def main():
     # Input: B x W LongTensor
     # Duplicate_matrix: B x B ByteTensor
     print('Starting.')
+    first_batch = True
     for epoch in train_loader:
+        total_cost = 0
         for ind, (input, duplicate_matrix) in enumerate(epoch):
             start_time = time.time()
-            duplicate = Variable(duplicate)
+            input = Variable(input)
             model.zero_grad()
+
+            if first_batch:
+                print(input)
+                print(duplicate_matrix)
+                first_batch = False
 
             # RUN THE MODEL FOR THIS BATCH.
             auto, dist = model(input)
@@ -238,7 +267,7 @@ def main():
                 for p in model.parameters():
                     p.data.add_(-args.lr, p.grad.data)
 
-            total_cost = 0.6 * total_cost + 0.4 * loss.data[0]
+            total_cost += loss.data[0]
 
             if ind % args.loginterval == 0 and ind > 0:
                 cur_loss = total_cost / (ind * args.batchsize)
