@@ -21,29 +21,14 @@ from models import LSTMModel
 
 
 
-# data_path = '../data/train.csv'
-# d_in = 30
-# d_emb = 50
-# cuda = False
-# batch_size = 20
-# epochs = 20
-# d_out = 2
-# d_hid = 50
-# n_layers = 1
-# optimizer = True
-# lr = 0.05
-# dropout = 0.0
-# clip = 0.25
-# vocab_size = 20000
-# cuda = False
-# log_interval = 200
-
-
-def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.80):
+def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.90):
     print('Loading Data')
     train_data = pd.read_csv(data_path)
     val_data = train_data.iloc[int(len(train_data)*train_split):]
     train_data = train_data.iloc[:int(len(train_data)*train_split)]
+    # val_data = train_data.iloc[1000:1100]
+    # train_data = train_data.iloc[:1000]
+
 
     print('Cleaning and Tokenizing')
     q1, q2, y = clean_and_tokenize(train_data)
@@ -52,7 +37,6 @@ def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.80):
     question_field = data.Field(sequential=True, use_vocab=True, lower=True,
                                 fix_length=d_in)
     question_field.build_vocab(q1 + q2 + q1_val + q2_val, {'max_size': vocab_size})
-    print(len(question_field.vocab.itos))
 
     device = -1
     if cuda:
@@ -73,7 +57,7 @@ def clean_and_tokenize(data):
     q2 = [word_tokenize(x) for x in q2]
     return q1, q2, y
 
-
+#Cuda should be None if want cuda
 def pad_and_shape(field, q1, q2, y, num_samples, d_in, cuda):
     q1_pad_num = field.numericalize(field.pad(q1), device=cuda)
     q2_pad_num = field.numericalize(field.pad(q2), device=cuda)
@@ -82,7 +66,7 @@ def pad_and_shape(field, q1, q2, y, num_samples, d_in, cuda):
     X[0, 1, :, :] = q2_pad_num.data
     X.transpose_(0, 3).transpose_(2, 3).transpose_(1, 2)
     y = torch.from_numpy(np.array(y)).long()
-    if cuda:
+    if cuda is None:
         X = X.cuda()
         y = y.cuda()
     return X, y
@@ -118,7 +102,7 @@ def main():
                         help='number of output classes')
     parser.add_argument('--nlayers', type=int, default=1,
                         help='number of layers')
-    parser.add_argument('--lr', type=float, default=0.01,
+    parser.add_argument('--lr', type=float, default=0.001,
                         help='initial learning rate')
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping')
@@ -168,7 +152,7 @@ def main():
 
 
     ntokens = len(q_field.vocab.itos)
-    print(ntokens)
+    # print(ntokens)
     glove_embeddings = None
     if args.embinit == 'glove':
         assert args.demb in (50, 100, 200, 300)
@@ -188,7 +172,7 @@ def main():
     model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, 
                         args.embinit, args.freezeemb, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize)])
 
-    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | FreezeEmb | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize')
+    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | EncoderGrad | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize')
     print(model_config)
 
     for epoch in range(args.epochs):
@@ -198,7 +182,8 @@ def main():
             start_time = time.time()
             duplicate = Variable(duplicate)
             model.zero_grad()
-            pred = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
+            pred = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
+            # pred = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
             loss = criterion(pred, duplicate)
             loss.backward()
             clip_grad_norm(model.parameters(), args.clip)
@@ -212,7 +197,8 @@ def main():
             total_cost += loss.data[0]
 
             if ind % args.loginterval == 0 and ind > 0:
-                cur_loss = total_cost / (ind * args.batchsize)
+                # cur_loss = total_cost / (ind * args.batchsize)
+                cur_loss = loss.data[0] / args.batchsize
                 elapsed = time.time() - start_time
                 print('| Epoch {:3d} | {:5d}/{:5d} Batches | ms/batch {:5.2f} | '
                         'Loss {:.6f}'.format(
@@ -223,14 +209,16 @@ def main():
         for ind, (qs, duplicate) in enumerate(train_loader2):
             duplicate = Variable(duplicate)
             model.eval()
-            out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
+            out = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
+            # out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
             pred = out.data.numpy().argmax(axis=1)
             train_acc = np.mean(pred == duplicate.data.numpy())      
 
         for ind, (qs, duplicate) in enumerate(valid_loader):
             duplicate = Variable(duplicate)
             model.eval()
-            out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
+            out = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
+            # out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
             pred = out.data.numpy().argmax(axis=1)
             acc = np.mean(pred == duplicate.data.numpy())
 

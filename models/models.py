@@ -14,13 +14,8 @@ from torch.autograd import Variable
 class FC(nn.Module):
     def __init__(self, d_in, d_out, dropout):
         super(FC, self).__init__()
-        # self.sequential = nn.Sequential()
-        # self.sequential.add_module('linear1', nn.Linear(d_in, 
-        #                                                 d_out, 
-        #                                                 bias=True))
-        # self.sequential.add_module('softmax', nn.LogSoftmax())
-        self.dropout = dropout
 
+        self.dropout = dropout
         self.fc = nn.Linear(d_in, d_out, bias=True)
 
 
@@ -29,8 +24,15 @@ class FC(nn.Module):
         X = self.fc(X)
         return F.log_softmax(X)
 
-        # out = self.sequential(X)
-        # return out
+
+    def init_weights(self, weight_init):
+        init_types = {'random':functools.partial(init.uniform, a=-0.1, b=0.1),
+                        'constant': functools.partial(init.constant, val=0.1),
+                        'xavier_n': init.xavier_normal,
+                        'xavier_u': init.xavier_uniform,
+                        'orthogonal': init.orthogonal}
+
+        init_types[weight_init](self.fc.weight)
 
 
 class MLP(nn.Module):
@@ -66,6 +68,18 @@ class BiLSTM(nn.Module):
         return out, hid[0], hid[1]
 
 
+    def init_weights(self, weight_init):
+        init_types = {'random':functools.partial(init.uniform, a=-0.1, b=0.1),
+                        'constant': functools.partial(init.constant, val=0.1),
+                        'xavier_n': init.xavier_normal,
+                        'xavier_u': init.xavier_uniform,
+                        'orthogonal': init.orthogonal}
+        for layer in self.lstm._all_weights:
+            for w in layer:
+                if 'bias' not in w:
+                    init_types[weight_init](getattr(self.lstm, w))
+
+
 class LSTMModel(nn.Module):
     def __init__(self, d_in, d_hid, n_layers, d_out, d_emb, vocab, dropout,
                     emb_init, hid_init, dec_init, glove_emb, freeze_emb):
@@ -86,10 +100,6 @@ class LSTMModel(nn.Module):
 
         #(d_hid * directions * questions * layers)
         self.fc = FC(d_hid * 2 * 2 * n_layers, d_out, dropout)
-        # self.seq_3 = nn.Sequential()
-        # self.seq_3.add_module('drop', nn.Dropout(dropout))
-        # #d_hid * directions * questions * layers
-        # self.seq_3.add_module('mlp', FC(d_hid * 2 * 2 * n_layers, d_out, dropout))
 
         self.init_weights(emb_init, hid_init, dec_init, glove_emb)
 
@@ -107,17 +117,12 @@ class LSTMModel(nn.Module):
             init_types[emb_init](self.embedding1.weight)
             init_types[emb_init](self.embedding2.weight)
 
-        # init_types[hid_init](self.bilstm_1.weight_ih_l)
-        # init_types[hid_init](self.bilstm_1.weight_hh_l)
-        # init_types[hid_init](self.bilstm_2.weight_ih_l)
-        # init_types[hid_init](self.bilstm_2.weight_hh_l)
-
-        # init_types[dec_init](self.fc.weight)
+        self.bilstm_1.init_weights(hid_init)
+        self.bilstm_2.init_weights(hid_init)
+        self.fc.init_weights(dec_init)
 
 
     def forward(self, X1, X2):
-        # X1 = Variable(torch.from_numpy(X1.numpy()).long())
-        # X2 = Variable(torch.from_numpy(X2.numpy()).long())
         X1 = Variable(X1)
         X2 = Variable(X2)
 
@@ -136,7 +141,6 @@ class LSTMModel(nn.Module):
         #Concatenates Question Hidden States Together
         h_cat = torch.cat([hid1, hid2], 1)
         return self.fc(h_cat)
-        # return self.seq_3(h_cat)
 
 
     def init_hidden(self, batch_size):
