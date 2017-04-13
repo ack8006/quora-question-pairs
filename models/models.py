@@ -171,7 +171,7 @@ class EmbeddingAutoencoder(nn.Module):
         # Times 2 because of bidirectional.
         self.fc_decoder = FC(self.bilstm_decoder.lstm.hidden_size
                 * 2 * self.bilstm_decoder.lstm.num_layers,
-                self.word_embedding.embedding_dim, dropout)
+                self.word_embedding.num_embeddings, dropout)
 
         assert self.word_embedding.embedding_dim == \
             self.bilstm_encoder.lstm.input_size

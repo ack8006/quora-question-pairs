@@ -113,6 +113,7 @@ def generate(args, qids, questions):
     qids_list = list(qids)
     def batch():
         np.random.shuffle(duplist)
+        seed_size = 5
         for dup_batch in xrange(0, len(duplist), seed_size): # Seed size
             if args.batches > 0 and dup_batch / seed_size > args.batches:
                 return
@@ -140,7 +141,6 @@ def generate(args, qids, questions):
             yield questions[torch.LongTensor(indices)], torch.from_numpy(mtx)
 
     for e in range(args.epochs):
-        seed_size = 5
         yield batch()
 
 
@@ -199,7 +199,7 @@ def main():
                         help='epochs to train against.')
     parser.add_argument('--batchsize', type=int, default=25, metavar='N',
                         help='batch size')
-    parser.add_argument('--batches', type=int, default=-1,
+    parser.add_argument('--batches', type=int, default=300,
                         help='max batches in an epoch')
     parser.add_argument('--vocabsize', type=int, default=20000,
                         help='how many words to get from glove')
@@ -240,9 +240,9 @@ def main():
     # Duplicate_matrix: B x B ByteTensor
     print('Starting.')
     first_batch = True
-    for (eid, epoch) in enumerate(train_loader):
+    for (eid, batches) in enumerate(train_loader):
         total_cost = 0
-        for ind, (input, duplicate_matrix) in enumerate(epoch):
+        for ind, (input, duplicate_matrix) in enumerate(batches):
             start_time = time.time()
             input = Variable(input)
             model.zero_grad()
@@ -274,11 +274,12 @@ def main():
                 cur_loss = total_cost / (ind * args.batchsize)
                 elapsed = time.time() - start_time
                 print('Epoch {} | {:5d}/{} Batches | ms/batch {:5.2f} | '
-                        'Recent loss {:.6f}'.format(
-                            eid, ind, len(qid) // args.batchsize,
-                            elapsed * 1000.0 / args.loginterval, cur_loss))
+                        'loss {:.6f} {:.6f}'.format(
+                            eid, ind, args.batches,
+                            elapsed * 1000.0 / args.loginterval,
+                            rloss.data[0], dloss.data[0]))
 
-    print('-' * 89)
+        print('-' * 89)
 
     with open('autoencoder.pt', 'wb') as f:
         torch.save(model, f)
