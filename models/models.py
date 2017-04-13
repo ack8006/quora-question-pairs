@@ -144,9 +144,104 @@ class LSTMModel(nn.Module):
                 Variable(torch.zeros(self.n_layers * 2, batch_size, self.d_hid)))
 
 
+class EmbeddingAutoencoder(nn.Module):
+    '''The autoencoder does two things: try to recode the sentence, and embed
+    the encoding in a space that makes sense.
 
+    To do this, it has two loss functions:
+        - One component is just the reconstruction loss of the autoencoder.
+        - The other one makes sure that sentence duplicates are embedded
+          closely together.
+    '''
+    def __init__(self, word_embedding, bilstm_encoder, bilstm_decoder, fc_decoder):
+        '''Args:
+            word_embedding: nn.Embedding - Word IDs to embeddings
+            bilstm_encoder: BiLSTM - Sequence to hidden state
+            bilstm_decoder: BiLSTM - Hidden state to sequence of hidden states
+            fc_decoder: nn.Linear - Turns hidden states back to word probability
+        Dimensions must agree with each other.
+        '''
+        self.word_embedding = word_embedding
+        self.bilstm_encoder = bilstm_encoder
+        self.bilstm_decoder = bilstm_decoder
+        self.fc_decoder = fc_decoder
 
+        assert self.word_embedding.embedding_dim == \
+            self.bilstm_encoder.lstm.input_size
+        assert self.bilstm_encoder.lstm.num_layers == \
+            self.bilstm_decoder.lstm.num_layers
+        assert self.bilstm_encoder.lstm.hidden_size == \
+            self.bilstm_decoder.lstm.input_size
+        assert self.bilstm_encoder.lstm.hidden_size * \
+            self.bilstm_decoder.lstm.num_layers * 2 == \
+            self.fc_decoder.fc.in_features
+        assert self.fc_decoder.fc.out_features == \
+            self.word_embedding.num_embeddings
+        assert self.bilstm_encoder.lstm.batch_first
+        assert self.bilstm_decoder.lstm.batch_first
 
+    def encoder(self, X):
+        '''Run X through the encoder part. Args:
+            X: B x Seq_Len x D word embeddings
+        Returns:
+            hid: 2N x B x D encoded sentence for each batch.
+            flat: B x 2ND tensor same as hid, but flattened.'''
+        h0 = self.init_hidden(X.size(0))
+        _, hid, _ = self.bilstm_encoder(X, h0) # Want only the hidden states.
+        flat = torch.cat(torch.chunk(hid, hid.size(0)), 2)[0]
+        return hid, flat
+
+    def decoder(self, h0, X):
+        '''Run X through the decoder part. Args:
+            h0: 2N x B x D hidden states from encoder.
+            X: B x Seq_Len x D word embeddings of the correct answer.
+        Returns:
+            output: B x Seq_Len X D output class probabilities.'''
+        # B x S x ND
+        out, _, _ = self.bilstm_decoder(X, h0)
+        # S (B x ND)
+        words = [w.squeeze() for w in torch.chunk(hid, hid.size(0), dim=1)]
+        # S (B x D)
+        words = [self.fc_decoder(w) for w in words]
+        # B x S x D
+        return torch.stack(words, dim=1)
+
+    def distances(self, emb):
+        '''Args:
+            emb1: B x H embeddings
+        Returns:
+            dist: pairwise distances in a 1D tensor, that comes from the
+                  right triangular distance matrix.'''
+        B = emb.size(0)
+        # If B = 5, then dist will have 4+3+2+1 = 5*4/2 components
+        # If B = 4, then dist will have 3+2+1 = 4*3/2 components
+        d = B*(B-1)/2
+        dists = Variable(torch.FloatTensor(d))
+        current = 0
+        for row in range(B-1): # For B=5, go through rows 0,1,2,3 (skip 4)
+            start = row + 1 # For B=4,row1 (2nd): start from 2 (1,2),(1,3)
+            num = B - start # How many distances to compare
+            diff = emb[start:] - emb[row].unsqueeze(0).repeat(num)
+            dist = (diff * diff).sum(dim=1)
+            dists[current:current+num] = dist
+            current += num
+        return dists
+
+    def forward(self, X1):
+        '''Args:
+            X1: B x Seq_Len x D word embeddings
+        Returns:
+            auto_X1: autoencoded X1 (B x Seq_Len) LongTensor Variable
+            dist: pairwise distances between X1 and X2 FloatTensor Variable
+                  of size B x B'''
+
+        X1 = self.drop(self.word_embedding(X1))
+        h1, emb1 = self.encoder(X1)
+        auto_X1 = self.decoder(h1, X1)
+        dist = self.distances(emb1)
+        return auto_X1, dist
+
+        
 
 
 
