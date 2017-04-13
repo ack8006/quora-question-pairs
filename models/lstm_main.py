@@ -44,8 +44,6 @@ def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.80):
     train_data = pd.read_csv(data_path)
     val_data = train_data.iloc[int(len(train_data)*train_split):]
     train_data = train_data.iloc[:int(len(train_data)*train_split)]
-    # val_data = train_data.iloc[1000:2000]
-    # train_data = train_data.iloc[:1000]
 
     print('Cleaning and Tokenizing')
     q1, q2, y = clean_and_tokenize(train_data)
@@ -54,10 +52,11 @@ def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.80):
     question_field = data.Field(sequential=True, use_vocab=True, lower=True,
                                 fix_length=d_in)
     question_field.build_vocab(q1 + q2 + q1_val + q2_val, {'max_size': vocab_size})
+    print(len(question_field.vocab.itos))
 
     device = -1
     if cuda:
-        device = 1
+        device = None
 
     print('Padding and Shaping')
     X, y = pad_and_shape(question_field, q1, q2, y, len(train_data), d_in, device)
@@ -83,6 +82,9 @@ def pad_and_shape(field, q1, q2, y, num_samples, d_in, cuda):
     X[0, 1, :, :] = q2_pad_num.data
     X.transpose_(0, 3).transpose_(2, 3).transpose_(1, 2)
     y = torch.from_numpy(np.array(y)).long()
+    if cuda:
+        X = X.cuda()
+        y = y.cuda()
     return X, y
 
 
@@ -134,7 +136,7 @@ def main():
                         help='batch size')
     parser.add_argument('--seed', type=int, default=42,
                         help='random seed')
-    parser.add_argument('--vocabsize', type=int, default=60000,
+    parser.add_argument('--vocabsize', type=int, default=200000,
                         help='random seed')
     parser.add_argument('--optimizer', action='store_true',
                         help='use ADAM optimizer')
@@ -166,6 +168,7 @@ def main():
 
 
     ntokens = len(q_field.vocab.itos)
+    print(ntokens)
     glove_embeddings = None
     if args.embinit == 'glove':
         assert args.demb in (50, 100, 200, 300)
