@@ -238,9 +238,9 @@ def main():
     # Input: B x W LongTensor
     # Duplicate_matrix: B x B ByteTensor
     print('Starting.')
-    first_batch = True
     for (eid, batches) in enumerate(train_loader):
         total_cost = 0
+        first_batch = True
         for ind, (input, duplicate_matrix) in enumerate(batches):
             start_time = time.time()
             input = Variable(input)

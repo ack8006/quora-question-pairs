@@ -21,69 +21,57 @@ from models import LSTMModel
 
 
 
-def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.90):
+def load_data(args, glove):
     print('Loading Data')
-    train_data = pd.read_csv(data_path)
-    val_data = train_data.iloc[int(len(train_data)*train_split):]
-    train_data = train_data.iloc[:int(len(train_data)*train_split)]
-    # val_data = train_data.iloc[1000:1100]
-    # train_data = train_data.iloc[:1000]
+    data = pd.read_csv(args.data, encoding='utf-8')
+    data.columns = ['qid1', 'qid2']
 
+    train_data = data.iloc[:int(len(data)*0.8)]
+    valid_data = data.iloc[int(len(data)*0.8):]
 
     print('Cleaning and Tokenizing')
-    q1, q2, y = clean_and_tokenize(train_data)
-    q1_val, q2_val, y_val = clean_and_tokenize(val_data)
+    qid, q = clean_and_tokenize(args, train_data, glove.dictionary)
 
-    question_field = data.Field(sequential=True, use_vocab=True, lower=True,
-                                fix_length=d_in)
-    question_field.build_vocab(q1 + q2 + q1_val + q2_val, {'max_size': vocab_size})
+    return qid, q
 
-    device = -1
-    if cuda:
-        device = None
+def clean_and_tokenize(args, train_data, dictionary):
+    def to_indices(words):
+        ql = [dictionary.get(str(w), dictionary['<unk>']) for w in words]
+        qv = np.ones(args.din, dtype=int) * dictionary['<pad>'] # all padding
+        qv[:len(ql)] = ql[:args.din] # set values
+        return qv
 
-    print('Padding and Shaping')
-    X, y = pad_and_shape(question_field, q1, q2, y, len(train_data), d_in, device)
-    X_val, y_val = pad_and_shape(question_field, q1_val, q2_val, y_val, len(val_data), d_in, device)
-
-    return X, y, X_val, y_val, question_field
-
-
-def clean_and_tokenize(data):
-    q1 = list(data['question1'].map(str).apply(str.lower))
-    q2 = list(data['question2'].map(str).apply(str.lower))
-    y = list(data['is_duplicate'])
-    q1 = [word_tokenize(x) for x in q1]
-    q2 = [word_tokenize(x) for x in q2]
-    return q1, q2, y
-
-#Cuda should be None if want cuda
-def pad_and_shape(field, q1, q2, y, num_samples, d_in, cuda):
-    q1_pad_num = field.numericalize(field.pad(q1), device=cuda)
-    q2_pad_num = field.numericalize(field.pad(q2), device=cuda)
-    X = torch.Tensor(1, 2, d_in, num_samples)
-    X[0, 0, :, :] = q1_pad_num.data
-    X[0, 1, :, :] = q2_pad_num.data
-    X.transpose_(0, 3).transpose_(2, 3).transpose_(1, 2)
-    y = torch.from_numpy(np.array(y)).long()
-    if cuda is None:
-        X = X.cuda()
-        y = y.cuda()
-    return X, y
+    qids = []
+    qs = []
+    processed = 0
+    print('Reading max:', args.max_sentences)
+    for example in train_data.itertuples():
+        if processed % 10000 == 0:
+            print('processed {0}'.format(processed))
+        if processed > args.max_sentences:
+            break
+        tokens = nlp(example.question, parse=False)
+        qids.append(example.qid)
+        qs.append(to_indices(tokens))
+        processed += 1
+    qst = torch.LongTensor(np.stack(qs, axis=0))
+    qidst = torch.LongTensor(qids)
+    return qidst, qst
 
 
-def get_glove_embeddings(file_path, corpus, ntoken, nemb):
-    file_name = '/glove.6B.{}d.txt'.format(nemb)
-    f = open(file_path+file_name, 'r')
-    embeddings = torch.nn.init.xavier_uniform(torch.Tensor(ntoken, nemb))
-    for line in f:
-        split_line = line.split()
-        word = split_line[0]
-        if word in corpus:
-            embedding = torch.Tensor([float(val) for val in split_line[1:]])
-            # embeddings[corpus.dictionary.word2idx[word]] = embedding
-            embeddings[corpus[word]] = embedding
-    return embeddings
+class LoadedGlove:
+    def __init__(self, glove):
+        self.dictionary = glove[0]
+        self.lookup = glove[1]
+        self.module = glove[2]
+
+def load_glove(args):
+    # Returns dictionary, lookup, embed
+    print('loading Glove')
+    glove = data.load_embeddings(
+            '{1}/glove.6B.{0}d.txt'.format(args.demb, args.glovedata),
+            max_words=args.vocabsize)
+    return LoadedGlove(glove)
 
 
 def main():
@@ -156,6 +144,7 @@ def main():
         glove_embeddings = get_glove_embeddings(args.glovedata, q_field.vocab.stoi, ntokens, args.demb)
     
 
+    autoencoder = torch.load('autoencoder.pt')
     model = LSTMModel(args.din, args.dhid, args.nlayers, args.dout, args.demb, args.vocabsize, 
                         args.dropout, args.embinit, args.hidinit, args.decinit, glove_embeddings,
                         args.freezeemb, args.cuda)
