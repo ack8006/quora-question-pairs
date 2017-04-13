@@ -198,7 +198,7 @@ def main():
             start_time = time.time()
             duplicate = Variable(duplicate)
             model.zero_grad()
-            pred = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
+            pred = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
             loss = criterion(pred, duplicate)
             loss.backward()
             clip_grad_norm(model.parameters(), args.clip)
