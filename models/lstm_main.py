@@ -110,6 +110,7 @@ def generate(args, qids, questions):
     for qid1, qid2 in duplist:
             dup_lookup[qid1].append(qid2)
 
+    qids_list = list(qids)
     def batch():
         np.random.shuffle(duplist)
         for dup_batch in xrange(0, len(duplist), seed_size): # Seed size
@@ -127,7 +128,7 @@ def generate(args, qids, questions):
             np.random.shuffle(batch)
             batch = batch[:args.batchsize]
             while len(batch) < args.batchsize:
-                batch.append(np.random.choice(qids))
+                batch.append(np.random.choice(qids_list))
 
             mtx = np.zeros((len(batch), len(batch)), dtype=np.int32)
             for i, q1 in enumerate(batch):
@@ -239,7 +240,7 @@ def main():
     # Duplicate_matrix: B x B ByteTensor
     print('Starting.')
     first_batch = True
-    for epoch in train_loader:
+    for (eid, epoch) in enumerate(train_loader):
         total_cost = 0
         for ind, (input, duplicate_matrix) in enumerate(epoch):
             start_time = time.time()
@@ -272,9 +273,9 @@ def main():
             if ind % args.loginterval == 0 and ind > 0:
                 cur_loss = total_cost / (ind * args.batchsize)
                 elapsed = time.time() - start_time
-                print('| {:5d}/inf Batches | ms/batch {:5.2f} | '
+                print('Epoch {} | {:5d}/inf Batches | ms/batch {:5.2f} | '
                         'Recent loss {:.6f}'.format(
-                            ind, len(X) // args.batchsize,
+                            epoch, ind, len(qid) // args.batchsize,
                             elapsed * 1000.0 / args.loginterval, cur_loss))
 
     print('-' * 89)
