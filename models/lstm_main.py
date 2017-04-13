@@ -196,9 +196,15 @@ def main():
         total_cost = 0
         for ind, (qs, duplicate) in enumerate(train_loader):
             start_time = time.time()
+            if args.cuda:
+                qs = qs.cuda()
+                duplicate = duplicate.cuda()
+            print('Batch Types: ', type(qs), type(duplicate))
+            print(type(qs[:, 0, 0, :]), type(qs[:, 0, 0, :].long()))
             duplicate = Variable(duplicate)
             model.zero_grad()
-            pred = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
+
+            pred = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
             loss = criterion(pred, duplicate)
             loss.backward()
             clip_grad_norm(model.parameters(), args.clip)
