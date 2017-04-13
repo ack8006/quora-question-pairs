@@ -1,6 +1,8 @@
 import data
 import features
 import torch
+import itertools
+import pickle
 from torch.autograd import Variable
 from torch import nn
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -13,10 +15,11 @@ class QuoraSlice:
             word_embeddings_path,
             tfidf_corpus,
             dataset,
-            glove_max_words=20000,
+            glove_max_words=50000,
             glove_dim=100,
             sentence_length=30,
             permute_batchsize=25,
+            permute_trials=250,
             parent_model=None):
 
         if parent_model is None:
@@ -50,7 +53,8 @@ class QuoraSlice:
             print('tf-idf done.')
 
             # Other modules/features.
-            self.perm = features.Permute(differentiable=False)
+            self.perm = features.Permute(\
+                    differentiable=False, n_trials=permute_trials)
 
         else:  # Model inherits from a parent.
             print('Taking embeddings from parent.')
@@ -72,10 +76,11 @@ class QuoraSlice:
         # ==================================================================
         print('Tensorizing sentences to LongTensors')
         self.q1_words, self.q2_words, self.y = \
-            data.tensorize(dataset, dictionary, length=sentence_length)
-        self data_size = self.q1_words.size(0)
+            data.tensorize(dataset, self.glove_dictionary,
+            length=self.sentence_length)
+        self.data_size = self.q1_words.size(0)
         print(self.q1_words[3:10])
-        print('Loaded {0} pairs', self.data_size)
+        print('Loaded {0} pairs'.format(self.data_size))
 
         # ==================================================================
         # Embed: Get TF-IDF embeddings.
@@ -109,7 +114,7 @@ class QuoraSlice:
         self.X_permuted = features.apply(\
                 self.X_q1, self.X_q2,
                 do_perm, batchsize=permute_batchsize, print_every=100)
-        print('Result: ' + str(X_train_permute.size()))
+        print('Result: ' + str(self.X_permuted.size()))
 
         # ==================================================================
         # Feature 3: KL-divergence based.
@@ -124,6 +129,20 @@ class QuoraSlice:
         self.X_kls = features.apply(\
                 self.X_q2, self.X_q1,
                 features.symmetric_kl_div, print_every=100)
+
+        print('Catting all of this together')
+        self.X_all = torch.cat([
+            self.X_q1_mean,
+            self.X_q2_mean,
+            (self.X_q1_mean * self.X_q2_mean),
+            self.X_permuted,
+            self.X_kl12,
+            self.X_kl21,
+            self.X_kls,
+            (self.X_kl12 * self.X_kl21)
+        ], 1)
+
+        print('Done!')
 
 
 

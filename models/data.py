@@ -44,7 +44,7 @@ def load_embeddings(filepath, max_words=50000, embed_dim=100):
 
             if current_word % 10000 == 0:
                 logger.info('loaded %d words', current_word)
-            if current_word == max_words:
+            if current_word == max_words - 1:
                 break
     embeddings = torch.from_numpy(np.stack(rows, axis=0)).float()
     avg = embeddings.mean(dim=0)
