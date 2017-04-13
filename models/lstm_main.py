@@ -1,8 +1,9 @@
 import sys
-sys.path.append('../models/text/')
 
 import argparse
 import time
+import data
+import spacy
 
 import numpy as np
 import pandas as pd
@@ -11,15 +12,10 @@ import torch.nn as nn
 from torch.autograd import Variable
 from torch.nn.utils import clip_grad_norm
 from torch.utils.data import TensorDataset, DataLoader
-from torchtext import data
-
-import nltk
-nltk.download('punkt')
-from nltk.tokenize import word_tokenize
 
 from models import BiLSTM, EmbeddingAutoencoder
 
-
+nlp = spacy.load('en', parser=False)
 
 # data_path = '../data/train.csv'
 # d_in = 30
@@ -39,67 +35,95 @@ from models import BiLSTM, EmbeddingAutoencoder
 # log_interval = 200
 
 
-def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.80):
+def load_data(args, glove):
     print('Loading Data')
-    train_data = pd.read_csv(data_path)
-    val_data = train_data.iloc[int(len(train_data)*train_split):]
-    train_data = train_data.iloc[:int(len(train_data)*train_split)]
+    data = pd.read_csv(args.data, encoding='utf-8')
+    data.columns = ['qid', 'question']
+    duplicates = pd.read_csv(args.duplicates)
+
+    train_data = data.iloc[:int(len(data)*0.8)]
 
     print('Cleaning and Tokenizing')
-    q1, q2, y = clean_and_tokenize(train_data)
-    q1_val, q2_val, y_val = clean_and_tokenize(val_data)
+    qid, q = clean_and_tokenize(args, train_data, glove.dictionary)
 
-    question_field = data.Field(sequential=True, use_vocab=True, lower=True,
-                                fix_length=d_in)
-    question_field.build_vocab(q1 + q2 + q1_val + q2_val, {'max_size': vocab_size})
-    print(len(question_field.vocab.itos))
+    return qid, q
 
-    device = -1
-    if cuda:
-        device = None
+def clean_and_tokenize(args, train_data, dictionary):
+    def to_indices(words):
+        ql = [dictionary.get(str(w), dictionary['<unk>']) for w in words]
+        qv = np.ones(args.din, dtype=int) * dictionary['<pad>'] # all padding
+        qv[:len(ql)] = ql[:args.din] # set values
+        return qv
 
-    print('Padding and Shaping')
-    X, y = pad_and_shape(question_field, q1, q2, y, len(train_data), d_in, device)
-    X_val, y_val = pad_and_shape(question_field, q1_val, q2_val, y_val, len(val_data), d_in, device)
+    qids = []
+    qs = []
+    for example in train_data.itertuples():
+        tokens = nlp(example.question, parse=False)
+        qids.append(example.qid)
+        qs.append(to_indices(tokens))
+    qst = torch.LongTensor(np.stack(qs, axis=0))
+    qidst = torch.LongTensor(qids)
+    return qidst, qst
 
-    return X, y, X_val, y_val, question_field
+class LoadedGlove:
+    def __init__(self, glove):
+        self.dictionary = glove[0]
+        self.lookup = glove[1]
+        self.module = glove[2]
 
-
-def clean_and_tokenize(data):
-    q1 = list(data['question1'].map(str).apply(str.lower))
-    q2 = list(data['question2'].map(str).apply(str.lower))
-    y = list(data['is_duplicate'])
-    q1 = [word_tokenize(x) for x in q1]
-    q2 = [word_tokenize(x) for x in q2]
-    return q1, q2, y
-
-
-def pad_and_shape(field, q1, q2, y, num_samples, d_in, cuda):
-    q1_pad_num = field.numericalize(field.pad(q1), device=cuda)
-    q2_pad_num = field.numericalize(field.pad(q2), device=cuda)
-    X = torch.Tensor(1, 2, d_in, num_samples)
-    X[0, 0, :, :] = q1_pad_num.data
-    X[0, 1, :, :] = q2_pad_num.data
-    X.transpose_(0, 3).transpose_(2, 3).transpose_(1, 2)
-    y = torch.from_numpy(np.array(y)).long()
-    if cuda:
-        X = X.cuda()
-        y = y.cuda()
-    return X, y
+def load_glove(args):
+    # Returns dictionary, lookup, embed
+    print('loading Glove')
+    glove = data.load_embeddings(
+            '{1}/glove.6B.{0}d.txt'.format(args.demb, args.glovedata),
+            max_words=args.vocabsize)
+    return LoadedGlove(glove)
 
 
-def get_glove_embeddings(file_path, corpus, ntoken, nemb):
-    file_name = '/glove.6B.{}d.txt'.format(nemb)
-    f = open(file_path+file_name, 'r')
-    embeddings = torch.nn.init.xavier_uniform(torch.Tensor(ntoken, nemb))
-    for line in f:
-        split_line = line.split()
-        word = split_line[0]
-        if word in corpus:
-            embedding = torch.Tensor([float(val) for val in split_line[1:]])
-            # embeddings[corpus.dictionary.word2idx[word]] = embedding
-            embeddings[corpus[word]] = embedding
-    return embeddings
+def generate(args, qids, questions):
+    duplicates = pd.read_csv(args.duplicates)
+    data.columns = ['qid1', 'qid2']
+    # What duplicates are available.
+    duplist = list((t.qid1, t.qid2) for t in duplicates.itertuples())
+    # Is (q1, q2) a duplicate.
+    dupset = set(duplist)
+    # For q1, what are its duplicates.
+    dup_lookup = {qid: [] for qid in list(qids)}
+    idx_lookup = {qid: i for i, qid in enumerate(list(qids))}
+    for qid1, qid2 in duplist:
+            dup_lookup[qid1].append(qid2)
+
+    def batch():
+        np.random.shuffle(duplist)
+        for dup_batch in xrange(0, len(duplist), seed_size): # Seed size
+            if args.batches > 0 and dup_batch / seed_size > args.batches:
+                return
+            # Get a selection of duplicates as the seed.
+            seed_ids = [qid1 for qid1, qid2 in
+                    duplist[dup_batch:(dup_batch + seed_size)]]
+            # From the seeds, find other ids that are duplicates.
+            matching_duplicates = (dup_lookup[qid][:10] for qid in seed_ids)
+            # Flatten those IDs to a list.
+            dups_for_id = list(x for t in matching_duplicates for x in t)
+
+            batch = (id_select + dups_for_id)
+            np.random.shuffle(batch)
+            batch = batch[:args.batchsize]
+            while len(batch) < args.batchsize:
+                batch.append(np.random.choice(qids))
+
+            mtx = np.zeros((len(batch), len(batch)), dtype=np.int32)
+            for i, q1 in enumerate(batch):
+                for j, q2 in enumerate(batch):
+                    mtx[i,j] = (q1, q2) in dupset
+
+            # Yield input, duplicate matrix
+            indices = [idx_lookup[qid] for qid in batch]
+            yield questions[indices], torch.ByteTensor(mtx)
+
+    for e in range(args.epochs):
+        seed_size = 5
+        yield batch()
 
 
 def distance_loss(dist, duplicate_matrix):
@@ -122,9 +146,11 @@ def distance_loss(dist, duplicate_matrix):
 
 def main():
     parser = argparse.ArgumentParser(description='PyTorch Quora RNN/LSTM Language Model')
-    parser.add_argument('--data', type=str, default='../data/train.csv',
+    parser.add_argument('--data', type=str, default='../data/all_questions.csv',
                         help='location of the data corpus')
-    parser.add_argument('--glovedata', type=str, default='../data/glove.6B',
+    parser.add_argument('--duplicates', type=str, default='../data/unique_duplicates.csv',
+                        help='location of the data corpus')
+    parser.add_argument('--glovedata', type=str, default='../data/',
                         help='location of the pretrained glove embeddings')
     parser.add_argument('--din', type=int, default=30,
                         help='length of LSTM')
@@ -148,18 +174,16 @@ def main():
                         help='recurrent hidden weight initialization type')
     parser.add_argument('--dropout', type=float, default=0.0,
                         help='dropout applied to layers (0 = no dropout)')
-    parser.add_argument('--epochs', type=int, default=40,
-                        help='upper epoch limit')
-    parser.add_argument('--batchsize', type=int, default=20, metavar='N',
+    parser.add_argument('--epochs', type=int, default=2,
+                        help='epochs to train against.')
+    parser.add_argument('--batchsize', type=int, default=25, metavar='N',
                         help='batch size')
-    parser.add_argument('--seed', type=int, default=42,
-                        help='random seed')
-    parser.add_argument('--vocabsize', type=int, default=200000,
-                        help='random seed')
+    parser.add_argument('--batches', type=int, default=-1,
+                        help='max batches in an epoch')
+    parser.add_argument('--vocabsize', type=int, default=20000,
+                        help='how many words to get from glove')
     parser.add_argument('--optimizer', action='store_true',
                         help='use ADAM optimizer')
-    parser.add_argument('--freezeemb', action='store_false',
-                        help='freezes embeddings')
     parser.add_argument('--cuda', action='store_true',
                         help='use CUDA')
     parser.add_argument('--loginterval', type=int, default=100, metavar='N',
@@ -168,27 +192,12 @@ def main():
                         help='path to save the final model')
     args = parser.parse_args()
 
-    X, y, X_val, y_val, q_field = load_data(
-            args.data, args.din, args.vocabsize, args.cuda, train_split=0.8)
+    assert args.demb in (50, 100, 200, 300)
+    glove = load_glove(args)
+    qid, questions = load_data(args, glove)
+    train_loader = generate(args, qid, questions)
 
-    print('Generating Data Loaders')
-    #X.size len(train_data),1,2,fix_length
-    train_dataset = TensorDataset(X, y)
-    train_loader = DataLoader(train_dataset, 
-                                batch_size=args.batchsize, 
-                                shuffle=True)
-
-
-    ntokens = len(q_field.vocab.itos)
-    print(ntokens)
-    glove_embeddings = None
-    if args.embinit == 'glove':
-        assert args.demb in (50, 100, 200, 300)
-        glove_embeddings = get_glove_embeddings(args.glovedata, q_field.vocab.stoi, ntokens, args.demb)
-    
-    embedding = nn.Embedding(args.vocabsize, args.demb)
-    if args.embinit == 'glove':
-        embedding.weight.data = glove_embeddings
+    embedding = glove.module
     bilstm_encoder = BiLSTM(args.demb, args.dhid, args.nlayers, args.dropout)
     bilstm_decoder = BiLSTM(args.dhid, args.dhid, args.nlayers, args.dropout)
     model = EmbeddingAutoencoder(embedding, bilstm_encoder, bilstm_decoder)
@@ -204,23 +213,21 @@ def main():
     # print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | FreezeEmb | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize')
     # print(model_config)
 
-    for epoch in range(args.epochs):
-        model.train()
-        total_cost = 0
-        for ind, (qs, duplicate) in enumerate(train_loader):
+    # Input: B x W LongTensor
+    # Duplicate_matrix: B x B ByteTensor
+    print('Starting.')
+    for epoch in train_loader:
+        for ind, (input, duplicate_matrix) in enumerate(epoch):
             start_time = time.time()
             duplicate = Variable(duplicate)
             model.zero_grad()
 
-            # TODO: input
-            # TODO: X
-            # TODO: duplicate_matrix
-
             # RUN THE MODEL FOR THIS BATCH.
-            auto, dist = model(X)
-            loss = reconstruction_loss(
+            auto, dist = model(input)
+            rloss = reconstruction_loss(
                     auto.view(-1, args.vocabsize), input.view(-1))
-            loss += distance_loss(dist, duplicate_matrix)
+            dloss = distance_loss(dist, duplicate_matrix)
+            loss = rloss + dloss
 
             loss.backward()
             clip_grad_norm(model.parameters(), args.clip)
@@ -231,19 +238,17 @@ def main():
                 for p in model.parameters():
                     p.data.add_(-args.lr, p.grad.data)
 
-            total_cost += loss.data[0]
+            total_cost = 0.6 * total_cost + 0.4 * loss.data[0]
 
             if ind % args.loginterval == 0 and ind > 0:
                 cur_loss = total_cost / (ind * args.batchsize)
                 elapsed = time.time() - start_time
-                print('| Epoch {:3d} | {:5d}/{:5d} Batches | ms/batch {:5.2f} | '
-                        'Loss {:.6f}'.format(
-                            epoch, ind, len(X) // args.batchsize,
+                print('| {:5d}/inf Batches | ms/batch {:5.2f} | '
+                        'Recent loss {:.6f}'.format(
+                            ind, len(X) // args.batchsize,
                             elapsed * 1000.0 / args.loginterval, cur_loss))
 
-            print('Epoch: {} | Train Loss: {:.4f}'.format(
-                epoch, total_cost, train_acc, acc))
-        print('-' * 89)
+    print('-' * 89)
 
     with open('autoencoder.pt', 'wb') as f:
         torch.save(model, f)

@@ -154,7 +154,7 @@ class EmbeddingAutoencoder(nn.Module):
           closely together.
     '''
     def __init__(self, word_embedding, bilstm_encoder, bilstm_decoder,
-            dropout=0.0, glove=None)
+            dropout=0.0, glove=None):
         '''Args:
             word_embedding: nn.Embedding - Word IDs to embeddings
             bilstm_encoder: BiLSTM - Sequence to hidden state
@@ -236,7 +236,7 @@ class EmbeddingAutoencoder(nn.Module):
 
     def forward(self, X1):
         '''Args:
-            X1: B x Seq_Len x D word embeddings
+            X1: B x Seq_Len word tokens
         Returns:
             auto_X1: autoencoded X1 (B x Seq_Len x W) log-probabilities
             dist: pairwise distances between X1 and X2 FloatTensor Variable
