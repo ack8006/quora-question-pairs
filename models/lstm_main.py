@@ -24,10 +24,10 @@ from models import LSTMModel
 def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.90):
     print('Loading Data')
     train_data = pd.read_csv(data_path)
-    # val_data = train_data.iloc[int(len(train_data)*train_split):]
-    # train_data = train_data.iloc[:int(len(train_data)*train_split)]
-    val_data = train_data.iloc[1000:1100]
-    train_data = train_data.iloc[:1000]
+    val_data = train_data.iloc[int(len(train_data)*train_split):]
+    train_data = train_data.iloc[:int(len(train_data)*train_split)]
+    # val_data = train_data.iloc[1000:1100]
+    # train_data = train_data.iloc[:1000]
 
 
     print('Cleaning and Tokenizing')
@@ -143,9 +143,6 @@ def main():
     train_loader = DataLoader(train_dataset, 
                                 batch_size=args.batchsize, 
                                 shuffle=True)
-    # train_loader2 = DataLoader(train_dataset,
-    #                             batch_size = len(X),
-    #                             shuffle=False)
     valid_loader = DataLoader(TensorDataset(X_val, y_val),
                                 batch_size=args.batchsize,
                                 shuffle=False)
