@@ -39,11 +39,13 @@ from models import LSTMModel
 # log_interval = 200
 
 
-def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.80):
+def load_data(data_path, d_in, vocab_size, cuda, train_split=0.80):
     print('Loading Data')
     train_data = pd.read_csv(data_path)
-    val_data = train_data.iloc[int(len(train_data)*train_split):]
-    train_data = train_data.iloc[:int(len(train_data)*train_split)]
+    # val_data = train_data.iloc[int(len(train_data)*train_split):]
+    # train_data = train_data.iloc[:int(len(train_data)*train_split)]
+    val_data = train_data.iloc[15000:16000]
+    train_data = train_data.iloc[:15000]
 
     print('Cleaning and Tokenizing')
     q1, q2, y = clean_and_tokenize(train_data)
@@ -159,11 +161,11 @@ def main():
     train_loader = DataLoader(train_dataset, 
                                 batch_size=args.batchsize, 
                                 shuffle=True)
-    train_loader2 = DataLoader(train_dataset,
-                                batch_size = len(X),
-                                shuffle=False)
+    # train_loader2 = DataLoader(train_dataset,
+    #                             batch_size = len(X),
+    #                             shuffle=False)
     valid_loader = DataLoader(TensorDataset(X_val, y_val),
-                                batch_size=len(X_val),
+                                batch_size=args.batchsize,
                                 shuffle=False)
 
 
@@ -223,8 +225,8 @@ def main():
                             epoch, ind, len(X) // args.batchsize,
                             elapsed * 1000.0 / args.loginterval, cur_loss))
 
-        train_acc = 0
-        for ind, (qs, duplicate) in enumerate(train_loader2):
+        train_correct, train_total = 0, 0
+        for ind, (qs, duplicate) in enumerate(train_loader):
             if args.cuda:
                 qs = qs.cuda()
                 duplicate = duplicate.cuda()
@@ -232,8 +234,11 @@ def main():
             model.eval()
             out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
             pred = out.data.numpy().argmax(axis=1)
-            train_acc = np.mean(pred == duplicate.data.numpy())      
+            train_correct += np.sum(pred == duplicate.data.numpy())   
+            train_total += len(pred)
+        train_acc = train_correct / train_total 
 
+        val_correct, val_total = 0, 0
         for ind, (qs, duplicate) in enumerate(valid_loader):
             if args.cuda:
                 qs = qs.cuda()
@@ -242,10 +247,12 @@ def main():
             model.eval()
             out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
             pred = out.data.numpy().argmax(axis=1)
-            acc = np.mean(pred == duplicate.data.numpy())
+            val_correct += np.sum(pred == duplicate.data.numpy())
+            val_total += len(pred)
+        acc = val_correct/val_total
 
-            print('Epoch: {} | Train Loss: {:.4f} | Train Accuracy: {:.4f} | Val Accuracy: {:.4f}'.format(
-                epoch, total_cost, train_acc, acc))
+        print('Epoch: {} | Train Loss: {:.4f} | Train Accuracy: {:.4f} | Val Accuracy: {:.4f}'.format(
+            epoch, total_cost, train_acc, acc))
         print('-' * 89)
 
 
