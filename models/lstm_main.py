@@ -1,5 +1,5 @@
 import sys
-sys.path.append('../models/text/')
+sys.path.append('../utils/')
 
 import argparse
 import time
@@ -11,7 +11,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 from torch.nn.utils import clip_grad_norm
 from torch.utils.data import TensorDataset, DataLoader
-from torchtext import data
+from data import TacoText
 
 import nltk
 nltk.download('punkt')
@@ -21,7 +21,7 @@ from models import LSTMModel
 
 
 
-def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.90):
+def load_data(data_path, d_in, vocab_size, train_split = 0.90):
     print('Loading Data')
     train_data = pd.read_csv(data_path)
     val_data = train_data.iloc[int(len(train_data)*train_split):]
@@ -29,46 +29,34 @@ def load_data(data_path, d_in, vocab_size, cuda, train_split = 0.90):
     # val_data = train_data.iloc[1000:1100]
     # train_data = train_data.iloc[:1000]
 
-
     print('Cleaning and Tokenizing')
     q1, q2, y = clean_and_tokenize(train_data)
     q1_val, q2_val, y_val = clean_and_tokenize(val_data)
 
-    question_field = data.Field(sequential=True, use_vocab=True, lower=True,
-                                fix_length=d_in)
-    question_field.build_vocab(q1 + q2 + q1_val + q2_val, {'max_size': vocab_size})
-
-    device = -1
-    if cuda:
-        device = None
+    corpus = TacoText(vocab_size, lower=True)
+    corpus.gen_vocab(q1+q2+q2_val+q1_val)
 
     print('Padding and Shaping')
-    X, y = pad_and_shape(question_field, q1, q2, y, len(train_data), d_in, device)
-    X_val, y_val = pad_and_shape(question_field, q1_val, q2_val, y_val, len(val_data), d_in, device)
+    X, y = pad_and_shape(corpus, q1, q2, y, len(train_data), d_in)
+    X_val, y_val = pad_and_shape(corpus, q1_val, q2_val, y_val, len(val_data), d_in)
 
-    return X, y, X_val, y_val, question_field
+    return X, y, X_val, y_val, corpus
 
 
 def clean_and_tokenize(data):
-    q1 = list(data['question1'].map(str).apply(str.lower))
-    q2 = list(data['question2'].map(str).apply(str.lower))
+    q1 = list(data['question1'].map(str))
+    q2 = list(data['question2'].map(str))
     y = list(data['is_duplicate'])
     q1 = [word_tokenize(x) for x in q1]
     q2 = [word_tokenize(x) for x in q2]
     return q1, q2, y
 
-#Cuda should be None if want cuda
-def pad_and_shape(field, q1, q2, y, num_samples, d_in, cuda):
-    q1_pad_num = field.numericalize(field.pad(q1), device=cuda)
-    q2_pad_num = field.numericalize(field.pad(q2), device=cuda)
-    X = torch.Tensor(1, 2, d_in, num_samples)
-    X[0, 0, :, :] = q1_pad_num.data
-    X[0, 1, :, :] = q2_pad_num.data
-    X.transpose_(0, 3).transpose_(2, 3).transpose_(1, 2)
+
+def pad_and_shape(corpus, q1, q2, y, num_samples, d_in):
+    X = torch.Tensor(num_samples, 1, 2, d_in).long()
+    X[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1, d_in)).long()
+    X[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2, d_in)).long()
     y = torch.from_numpy(np.array(y)).long()
-    if cuda is None:
-        X = X.cuda()
-        y = y.cuda()
     return X, y
 
 
@@ -84,6 +72,16 @@ def get_glove_embeddings(file_path, corpus, ntoken, nemb):
             # embeddings[corpus.dictionary.word2idx[word]] = embedding
             embeddings[corpus[word]] = embedding
     return embeddings
+
+
+def evaluate(model, data_loader):
+    correct, total = 0, 0
+    for ind, (qs, duplicate) in enumerate(data_loader):
+        out = model(qs[:, 0, 0, :], qs[:, 0, 1, :])
+        pred = out.data.max(1)[1]
+        correct += (pred == duplicate).sum()
+        total += len(pred)
+    return correct / total 
 
 
 def main():
@@ -135,7 +133,11 @@ def main():
     args = parser.parse_args()
 
 
-    X, y, X_val, y_val, q_field = load_data(args.data, args.din, args.vocabsize, args.cuda, train_split=0.8)
+    X, y, X_val, y_val, corpus = load_data(args.data, args.din, args.vocabsize, train_split=0.9)
+
+    if args.cuda:
+        X, y = X.cuda(), y.cuda()
+        X_val, y_val = X_val.cuda(), y_val.cuda()
 
     print('Generating Data Loaders')
     #X.size len(train_data),1,2,fix_length
@@ -147,14 +149,11 @@ def main():
                                 batch_size=args.batchsize,
                                 shuffle=False)
 
-
-    ntokens = len(q_field.vocab.itos)
-    # print(ntokens)
+    ntokens = len(corpus)
     glove_embeddings = None
     if args.embinit == 'glove':
         assert args.demb in (50, 100, 200, 300)
-        glove_embeddings = get_glove_embeddings(args.glovedata, q_field.vocab.stoi, ntokens, args.demb)
-    
+        glove_embeddings = get_glove_embeddings(args.glovedata, corpus.dictionary.word2idx, ntokens, args.demb)
 
     model = LSTMModel(args.din, args.dhid, args.nlayers, args.dout, args.demb, args.vocabsize, 
                         args.dropout, args.embinit, args.hidinit, args.decinit, glove_embeddings,
@@ -176,13 +175,11 @@ def main():
         model.train()
         total_cost = 0
         start_time = time.time()
+        cur_loss = 0
         for ind, (qs, duplicate) in enumerate(train_loader):
-            if args.cuda:
-                qs = qs.cuda()
-                duplicate = duplicate.cuda()
             duplicate = Variable(duplicate)
             model.zero_grad()
-            pred = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
+            pred = model(qs[:, 0, 0, :], qs[:, 0, 1, :])
             loss = criterion(pred, duplicate)
             loss.backward()
             clip_grad_norm(model.parameters(), args.clip)
@@ -194,42 +191,24 @@ def main():
                     p.data.add_(-args.lr, p.grad.data)
 
             total_cost += loss.data[0]
+            cur_loss += loss.data[0]
 
             if ind % args.loginterval == 0 and ind > 0:
-                # cur_loss = total_cost / (ind * args.batchsize)
-                cur_loss = loss.data[0] / args.batchsize
+                cur_loss = loss.data[0] / args.loginterval
                 elapsed = time.time() - start_time
                 print('| Epoch {:3d} | {:5d}/{:5d} Batches | ms/batch {:5.2f} | '
                         'Loss {:.6f}'.format(
                             epoch, ind, len(X) // args.batchsize,
                             elapsed * 1000.0 / args.loginterval, cur_loss))
                 start_time = time.time()
+                cur_loss = 0
 
         model.eval()
-        train_correct, train_total = 0, 0
-        for ind, (qs, duplicate) in enumerate(train_loader):
-            if args.cuda:
-                qs = qs.cuda()
-            out = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
-            # out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
-            pred = out.data.cpu().numpy().argmax(axis=1)
-            train_correct += np.sum(pred == duplicate.cpu().numpy())   
-            train_total += len(pred)
-        train_acc = train_correct / train_total 
-
-        val_correct, val_total = 0, 0
-        for ind, (qs, duplicate) in enumerate(valid_loader):
-            if args.cuda:
-                qs = qs.cuda()
-            out = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long())
-            # out = model(qs[:, 0, 0, :].long().cuda(), qs[:, 0, 1, :].long().cuda())
-            pred = out.data.cpu().numpy().argmax(axis=1)
-            val_correct += np.sum(pred == duplicate.cpu().numpy())
-            val_total += len(pred)
-        acc = val_correct/val_total
+        train_acc = evaluate(model, train_loader)
+        val_acc = evaluate(model, valid_loader)
 
         print('Epoch: {} | Train Loss: {:.4f} | Train Accuracy: {:.4f} | Val Accuracy: {:.4f}'.format(
-            epoch, total_cost, train_acc, acc))
+            epoch, total_cost, train_acc, val_acc))
         print('-' * 89)
 
 

@@ -50,6 +50,17 @@ class MLP(nn.Module):
         return F.log_softmax(X)
 
 
+    def init_weights(self, weight_init):
+        init_types = {'random':functools.partial(init.uniform, a=-0.1, b=0.1),
+                        'constant': functools.partial(init.constant, val=0.1),
+                        'xavier_n': init.xavier_normal,
+                        'xavier_u': init.xavier_uniform,
+                        'orthogonal': init.orthogonal}
+
+        init_types[weight_init](self.linear1.weight)
+        init_types[weight_init](self.linear2.weight)
+
+
 class BiLSTM(nn.Module):
     def __init__(self, d_emb, d_hid, n_layers, dropout):
         super(BiLSTM, self).__init__()
