@@ -48,6 +48,9 @@ def load_data(args, glove):
 
     print('Cleaning and Tokenizing')
     qid, q = clean_and_tokenize(args, train_data, glove.dictionary)
+    if args.cuda:
+        qid.cuda()
+        q.cuda()
 
     return qid, q
 
@@ -280,8 +283,10 @@ def main():
                             rloss.data[0], dloss.data[0]))
 
         print('-' * 89)
-
-    with open('autoencoder.pt', 'wb') as f:
+        with open('autoencoder.pt', 'wb') as f:
+            torch.save(model, f)
+    with open('autoencoder_cpu.pt', 'wb') as f:
+        model.cpu()
         torch.save(model, f)
 
 
