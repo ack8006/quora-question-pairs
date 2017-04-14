@@ -162,6 +162,12 @@ def distance_loss(dist, duplicate_matrix):
     min_dup = probability_dup.min(dim=1)[0]
     max_non = probability_non.max(dim=1)[0]
 
+    #probability_dup = (dist * duplicate_matrix).mean(dim=1)
+    #probability_non = (dist * (1 - duplicate_matrix)).mean(dim=1)
+
+    #min_dup = probability_dup
+    #max_non = probability_non
+
     # Hinge loss between lest likely duplicate and most likely non-duplicate.
     return (1 + max_non - min_dup).mean()
 
@@ -186,7 +192,7 @@ def main():
                         help='number of output classes')
     parser.add_argument('--nlayers', type=int, default=1,
                         help='number of layers')
-    parser.add_argument('--lr', type=float, default=0.01,
+    parser.add_argument('--lr', type=float, default=0.05,
                         help='initial learning rate')
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping')
@@ -232,7 +238,7 @@ def main():
     reconstruction_loss = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(
             [param for param in model.parameters()
-                if param.requires_grad], lr=args.lr)
+                if param.requires_grad], lr=args.lr, weight_decay=0.000001)
 
     # model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, 
     #                     args.embinit, args.freezeemb, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize)])
@@ -249,23 +255,21 @@ def main():
             start_time = time.time()
             input = Variable(input)
             model.zero_grad()
+            bsz = input.size(0)
 
             # RUN THE MODEL FOR THIS BATCH.
             if args.cuda and not input.is_cuda:
                 input = input.cuda()
             auto, prob = model(input)
-            rloss = reconstruction_loss(
+            rloss = bsz * reconstruction_loss(
                     auto.view(-1, args.vocabsize), input.view(-1))
             dloss = distance_loss(prob, Variable(duplicate_matrix))
-            if eid > 3:
-                loss = rloss + (1 - (2.0)**(3 - eid)) * dloss
-            else:
-                loss = rloss
+            loss = rloss + dloss
 
             if first_batch:
-                print(input)
-                print(duplicate_matrix)
-                print(prob)
+                #print(input)
+                #print(duplicate_matrix)
+                #print(prob)
                 first_batch = False
 
             loss.backward()

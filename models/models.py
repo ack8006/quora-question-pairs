@@ -178,8 +178,10 @@ class EmbeddingAutoencoder(nn.Module):
         self.bilstm_encoder = bilstm_encoder
         self.bilstm_decoder = bilstm_decoder
         # Times 2 because of bidirectional.
-        self.fc_decoder = FC(self.bilstm_decoder.lstm.hidden_size
+        self.fc_embedding = FC(self.bilstm_encoder.lstm.hidden_size
                 * 2 * self.bilstm_decoder.lstm.num_layers,
+                20, dropout) # Reduce dimensionality before taking distance.
+        self.fc_decoder = FC(self.bilstm_decoder.lstm.hidden_size * 2,
                 self.word_embedding.num_embeddings, dropout)
         self.batchnorm = nn.BatchNorm1d(
                 2 * self.bilstm_encoder.lstm.num_layers *
@@ -191,9 +193,8 @@ class EmbeddingAutoencoder(nn.Module):
             self.bilstm_decoder.lstm.num_layers
         assert self.bilstm_encoder.lstm.hidden_size == \
             self.bilstm_decoder.lstm.input_size
-        assert self.bilstm_encoder.lstm.hidden_size * \
-            self.bilstm_decoder.lstm.num_layers * 2 == \
-            self.fc_decoder.fc.in_features
+        assert self.bilstm_encoder.lstm.hidden_size * 2 == \
+            self.fc_decoder.fc.in_features # Last layer only
         assert self.fc_decoder.fc.out_features == \
             self.word_embedding.num_embeddings
         assert self.bilstm_encoder.lstm.batch_first
@@ -235,6 +236,7 @@ class EmbeddingAutoencoder(nn.Module):
                   likelihood function on pairs of data points.'''
         B = emb.size(0)
         emb = self.batchnorm(emb)
+        emb = self.fc_embedding(emb)
         dists = Variable(torch.FloatTensor(B, B)).cuda()
         for row in range(B):
             diff = emb - emb[row].unsqueeze(0).repeat(B, 1) # B x H
