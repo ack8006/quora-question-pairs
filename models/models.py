@@ -234,7 +234,8 @@ class EmbeddingAutoencoder(nn.Module):
             dist: B x B matrix. Cell (i, j) is p(j|i) according to some
                   likelihood function on pairs of data points.'''
         B = emb.size(0)
-        dists = Variable(torch.FloatTensor(B, B))
+        emb = self.batchnorm(emb)
+        dists = Variable(torch.FloatTensor(B, B)).cuda()
         for row in range(B):
             diff = emb - emb[row].unsqueeze(0).repeat(B, 1) # B x H
             dist = (diff * diff).sum(dim=1) # B x 1
@@ -249,7 +250,6 @@ class EmbeddingAutoencoder(nn.Module):
             auto_X1: autoencoded X1 (B x Seq_Len x W) log-probabilities
             prob: pairwise probabilities between X1 and X2 FloatTensor Variable
                   of size B x B'''
-
         X1 = self.drop(self.word_embedding(X1))
         h1, emb1 = self.encoder(X1)
         auto_X1 = self.decoder(h1, X1)
@@ -259,8 +259,8 @@ class EmbeddingAutoencoder(nn.Module):
     def init_hidden(self, batch_size, lstm):
         layer_dir = lstm.num_layers * 2
         d_hid = lstm.hidden_size
-        return (Variable(torch.zeros(layer_dir, batch_size, d_hid)), 
-                Variable(torch.zeros(layer_dir, batch_size, d_hid)))
+        return (Variable(torch.zeros(layer_dir, batch_size, d_hid).cuda()), 
+                Variable(torch.zeros(layer_dir, batch_size, d_hid).cuda()))
 
 
 

@@ -5,6 +5,7 @@ import sys
 import argparse
 import time
 import data
+import pickle
 import spacy
 
 import numpy as np
@@ -49,14 +50,14 @@ def load_data(args, glove):
     print('Cleaning and Tokenizing')
     qid, q = clean_and_tokenize(args, train_data, glove.dictionary)
     if args.cuda:
-        qid.cuda()
-        q.cuda()
+        qid = qid.cuda()
+        q = q.cuda()
 
     return qid, q
 
 def clean_and_tokenize(args, train_data, dictionary):
     def to_indices(words):
-        ql = [dictionary.get(str(w), dictionary['<unk>']) for w in words]
+        ql = [dictionary.get(str(w).lower(), dictionary['<unk>']) for w in words]
         qv = np.ones(args.din, dtype=int) * dictionary['<pad>'] # all padding
         qv[:len(ql)] = ql[:args.din] # set values
         return qv
@@ -142,7 +143,7 @@ def generate(args, qids, questions):
 
             # Yield input, duplicate matrix
             indices = [idx_lookup[qid] for qid in batch]
-            yield questions[torch.LongTensor(indices)], torch.from_numpy(mtx)
+            yield questions[torch.LongTensor(indices).cuda()], torch.from_numpy(mtx).cuda()
 
     for e in range(args.epochs):
         yield batch()
@@ -162,7 +163,7 @@ def distance_loss(dist, duplicate_matrix):
     max_non = probability_non.max(dim=1)[0]
 
     # Hinge loss between lest likely duplicate and most likely non-duplicate.
-    return F.relu(1 + max_non - min_dup).mean()
+    return (1 + max_non - min_dup).mean()
 
 
 def main():
@@ -250,11 +251,16 @@ def main():
             model.zero_grad()
 
             # RUN THE MODEL FOR THIS BATCH.
+            if args.cuda and not input.is_cuda:
+                input = input.cuda()
             auto, prob = model(input)
             rloss = reconstruction_loss(
                     auto.view(-1, args.vocabsize), input.view(-1))
             dloss = distance_loss(prob, Variable(duplicate_matrix))
-            loss = rloss + dloss
+            if eid > 3:
+                loss = rloss + (1 - (2.0)**(3 - eid)) * dloss
+            else:
+                loss = rloss
 
             if first_batch:
                 print(input)
