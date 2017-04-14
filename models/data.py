@@ -10,7 +10,7 @@ from torch.autograd import Variable
 
 logger = logging.getLogger('data')
 
-def load_embeddings(filepath, max_words=50000, embed_dim=100):
+def load_embeddings(filepath, max_words=50000, embed_dim=100, learnable=True):
     '''Load a GloVE embedding into a nn.Embedding.
     The 2nd-to-last word will be changed into a 'padding' word with embedding 0.
     The last word will be changed into an "unknown" embedding by averaging.
@@ -59,7 +59,7 @@ def load_embeddings(filepath, max_words=50000, embed_dim=100):
 
     embed = nn.Embedding(embeddings.size(0), embeddings.size(1))
     # Word embeddings are frozen.
-    embed.weight = nn.Parameter(embeddings, requires_grad=False)
+    embed.weight = nn.Parameter(embeddings, requires_grad=learnable)
     return dictionary, lookup, embed
 
 

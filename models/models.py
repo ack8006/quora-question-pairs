@@ -163,12 +163,13 @@ class EmbeddingAutoencoder(nn.Module):
           closely together.
     '''
     def __init__(self, word_embedding, bilstm_encoder, bilstm_decoder,
-            dropout=0.0, glove=None):
+            dropout=0.0, embed_size=20, glove=None):
         '''Args:
             word_embedding: nn.Embedding - Word IDs to embeddings
             bilstm_encoder: BiLSTM - Sequence to hidden state
             bilstm_decoder: BiLSTM - Hidden state to sequence of hidden states
             dropout: Float value that controls dropout aggressiveness.
+            embed_size: Embedded vector size.
             glove: Tensor containing GloVE vectors for init. Can be None.
         Dimensions must agree with each other.
         '''
@@ -180,12 +181,15 @@ class EmbeddingAutoencoder(nn.Module):
         # Times 2 because of bidirectional.
         self.fc_embedding = FC(self.bilstm_encoder.lstm.hidden_size
                 * 2 * self.bilstm_decoder.lstm.num_layers,
-                20, dropout) # Reduce dimensionality before taking distance.
+                embed_size, dropout) # Reduce dimensionality before taking distance.
         self.fc_decoder = FC(self.bilstm_decoder.lstm.hidden_size * 2,
                 self.word_embedding.num_embeddings, dropout)
         self.batchnorm = nn.BatchNorm1d(
                 2 * self.bilstm_encoder.lstm.num_layers *
                 self.bilstm_encoder.lstm.hidden_size)
+        self.batchnorm_decode = nn.BatchNorm1d(
+                2 * self.bilstm_decoder.lstm.hidden_size)
+        self.eye = torch.eye(100).cuda()
 
         assert self.word_embedding.embedding_dim == \
             self.bilstm_encoder.lstm.input_size
@@ -200,7 +204,7 @@ class EmbeddingAutoencoder(nn.Module):
         assert self.bilstm_encoder.lstm.batch_first
         assert self.bilstm_decoder.lstm.batch_first
 
-    def encoder(self, X):
+    def encoder(self, X, noise=None):
         '''Run X through the encoder part. Args:
             X: B x Seq_Len x D word embeddings
         Returns:
@@ -208,6 +212,15 @@ class EmbeddingAutoencoder(nn.Module):
             flat: B x 2ND tensor same as hid, but flattened.'''
         h0 = self.init_hidden(X.size(0), self.bilstm_encoder.lstm)
         _, hid, _ = self.bilstm_encoder(X, h0) # Want only the hidden states.
+
+        # Rotate hid so batchnorm works. hn = 2n x b x d
+        hn = hid.transpose(0, 1).contiguous().\
+            view(hid.size(1), hid.size(0) * hid.size(2)) # b x 2nd
+        hn = self.batchnorm(hn)
+        hid = hn.view(hid.size(1), hid.size(0), hid.size(2)).transpose(1, 0)
+        if noise:
+            hid = hid + noise(hid.size())
+
         flat = torch.cat(torch.chunk(hid, hid.size(0)), 2)[0]
         return hid, flat
 
@@ -217,15 +230,17 @@ class EmbeddingAutoencoder(nn.Module):
             X: B x Seq_Len x D word embeddings of the correct answer.
         Returns:
             output: B x Seq_Len X D output class probabilities.'''
-        # B x S x ND
+        # B x S x 2D
         h0 = self.init_hidden(X.size(0), self.bilstm_decoder.lstm)
         h0 = (h, h0[1])
         out, _, _ = self.bilstm_decoder(X, h0)
-        # S (B x ND)
+
+        # S (B x 2D)
         words = [w.squeeze() for w in torch.chunk(out, out.size(1), dim=1)]
-        # S (B x D)
-        words = [self.fc_decoder(w) for w in words]
-        # B x S x D
+        # S (B x 2D)
+        words = [self.fc_decoder(self.batchnorm_decode(w)) for w in words]
+        #words = [self.fc_decoder(w) for w in words]
+        # B x S x 2D
         return torch.stack(words, dim=1)
 
     def pair_probabilities(self, emb):
@@ -235,17 +250,20 @@ class EmbeddingAutoencoder(nn.Module):
             dist: B x B matrix. Cell (i, j) is p(j|i) according to some
                   likelihood function on pairs of data points.'''
         B = emb.size(0)
-        emb = self.batchnorm(emb)
         emb = self.fc_embedding(emb)
-        dists = Variable(torch.FloatTensor(B, B)).cuda()
+        probs = Variable(torch.FloatTensor(B, B)).cuda()
+        indicator = Variable(self.eye[:B, :B])
         for row in range(B):
             diff = emb - emb[row].unsqueeze(0).repeat(B, 1) # B x H
             dist = (diff * diff).sum(dim=1) # B x 1
             score = (-dist).exp() # Gaussian (ala SNE)
-            dists[row] = score / score.sum().repeat(B) # Columns sum to 1
-        return dists
+            score = score + 1e-8  # Stabilizer
+            score = score - indicator[row] * score
+            probs[row] = score / score.sum().repeat(B) # Columns sum to 1
+        #print(probs[3])
+        return probs
 
-    def forward(self, X1):
+    def forward(self, X1, noise=None):
         '''Args:
             X1: B x Seq_Len word tokens
         Returns:
@@ -253,7 +271,7 @@ class EmbeddingAutoencoder(nn.Module):
             prob: pairwise probabilities between X1 and X2 FloatTensor Variable
                   of size B x B'''
         X1 = self.drop(self.word_embedding(X1))
-        h1, emb1 = self.encoder(X1)
+        h1, emb1 = self.encoder(X1, noise)
         auto_X1 = self.decoder(h1, X1)
         prob = self.pair_probabilities(emb1)
         return auto_X1, prob

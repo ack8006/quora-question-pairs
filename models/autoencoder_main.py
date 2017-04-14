@@ -3,7 +3,9 @@ from __future__ import print_function
 import sys
 
 import argparse
+import itertools
 import time
+import math
 import data
 import pickle
 import spacy
@@ -115,61 +117,104 @@ def generate(args, qids, questions):
     for qid1, qid2 in duplist:
             dup_lookup[qid1].append(qid2)
 
-    qids_list = list(qids)
+    print('Generating seeds...')
+    seeds = []
+    seeds_seen = {}
+    for qid, dups in dup_lookup.items():
+        if len(dups) == 0:
+            continue
+        if qid in seeds_seen:
+            continue
+        seeds_seen[qid] = True
+        for d in dups:
+            seeds_seen[d] = True
+        seeds.append((qid, dups))
+    print('Seeds:', len(seeds))
+
     def batch():
-        np.random.shuffle(duplist)
-        seed_size = 5
-        for dup_batch in xrange(0, len(duplist), seed_size): # Seed size
+        np.random.shuffle(seeds)
+        seed_size = args.seed_size
+        for dup_batch in xrange(0, len(seeds), seed_size): # Seed size
             if args.batches > 0 and dup_batch / seed_size > args.batches:
                 return
             # Get a selection of duplicates as the seed.
-            seed_ids = [qid1 for qid1, qid2 in
-                    duplist[dup_batch:(dup_batch + seed_size)]]
+            seed_ids = []
+            seed_id_pairs = []
+            already = {}
+            for qid1, selection in seeds[dup_batch:(dup_batch + seed_size)]:
+                qid2 = np.random.choice(selection)
+                seed_ids.append(qid1)
+                seed_id_pairs.append(qid2)
+                already[qid1] = True
+                already[qid2] = True
             # From the seeds, find other ids that are duplicates.
-            matching_duplicates = (dup_lookup[qid][:10] for qid in seed_ids)
-            # Flatten those IDs to a list.
-            dups_for_id = list(x for t in matching_duplicates for x in t)
+            extra = []
+            for qid in seed_ids:
+                dups = dup_lookup[qid]
+                np.random.shuffle(dups)
+                for d in dups:
+                    if d not in already:
+                        already[d] = True
+                        extra.append(d)
 
-            batch = (seed_ids + dups_for_id)
+            np.random.shuffle(extra)
+            batch = seed_ids + seed_id_pairs + extra[:(args.batchsize - len(seed_ids) * 2)]
             np.random.shuffle(batch)
-            batch = batch[:args.batchsize]
-            while len(batch) < args.batchsize:
-                batch.append(np.random.choice(qids_list))
 
             mtx = np.zeros((len(batch), len(batch)), dtype=np.int32)
             for i, q1 in enumerate(batch):
                 for j, q2 in enumerate(batch):
                     mtx[i,j] = (q1, q2) in dupset
+            #print(mtx.sum(axis=1))
 
             # Yield input, duplicate matrix
             indices = [idx_lookup[qid] for qid in batch]
             yield questions[torch.LongTensor(indices).cuda()], torch.from_numpy(mtx).cuda()
 
+    print('Analysis done. Ready to generate batches.')
     for e in range(args.epochs):
         yield batch()
 
 
+eye = torch.eye(120).cuda()
 def distance_loss(dist, duplicate_matrix):
     '''Args:
         dist: B*B sized array of differences.
         duplicate_matrix: B*B array of is_duplicates.'''
     B = duplicate_matrix.size(0)
     duplicate_matrix = duplicate_matrix.float()
+    my_eye = eye[:B, :B]
+    non_duplicate_matrix = (1 - duplicate_matrix) - Variable(my_eye)
+    #print(duplicate_matrix)
+    #print(non_duplicate_matrix)
 
-    probability_dup = dist * duplicate_matrix + (1 - duplicate_matrix)
-    probability_non = dist * (1 - duplicate_matrix)
+    pd = dist * duplicate_matrix
+    probability_dup = pd + (1 - duplicate_matrix)
+    probability_non = dist * non_duplicate_matrix
 
     min_dup = probability_dup.min(dim=1)[0]
+    max_dup = pd.max(dim=1)[0]
     max_non = probability_non.max(dim=1)[0]
 
-    #probability_dup = (dist * duplicate_matrix).mean(dim=1)
-    #probability_non = (dist * (1 - duplicate_matrix)).mean(dim=1)
-
-    #min_dup = probability_dup
-    #max_non = probability_non
-
     # Hinge loss between lest likely duplicate and most likely non-duplicate.
-    return (1 + max_non - min_dup).mean()
+    return (1 + max_non - min_dup).mean(), (max_dup - max_non).mean()
+
+
+def noise(stdev=0.05, batch_size=50):
+    for_size = {}
+    def generate_noise(size):
+        if size not in for_size:
+            def gen():
+                while True:
+                    batch = [Variable(torch.randn(size).cuda() * stdev)
+                        for i in xrange(batch_size)]
+                    for b in batch:
+                        yield b
+            for_size[size] = gen()
+        return next(for_size[size])
+    # GN: function that takes a size and returns a noise vector with the given
+    # stdev, from a batch.
+    return generate_noise
 
 
 def main():
@@ -196,8 +241,22 @@ def main():
                         help='initial learning rate')
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping')
+    parser.add_argument('--noise_stdev', type=float, default=0.05,
+                        help='noise distribution standard deviation')
+    parser.add_argument('--dloss_factor', type=float, default=1.0,
+                        help='distance loss scaling')
+    parser.add_argument('--dloss_shift', type=int, default=4,
+                        help='when should dloss gating reach 0.5')
+    parser.add_argument('--dloss_slope', type=float, default=1.0,
+                        help='how quickly dloss goes from 0...1')
     parser.add_argument('--embinit', type=str, default='random',
                         help='embedding weight initialization type')
+    parser.add_argument('--squash_size', type=int, default=40,
+                        help='sentence embedding squash size')
+    parser.add_argument('--seed_size', type=int, default=10,
+                        help='how many seed points from which to sample duplicates')
+    parser.add_argument('--take_duplicates', type=int, default=10,
+                        help='how many duplicate points to take from each seed.')
     parser.add_argument('--decinit', type=str, default='random',
                         help='decoder weight initialization type')
     parser.add_argument('--hidinit', type=str, default='random',
@@ -210,6 +269,8 @@ def main():
                         help='batch size')
     parser.add_argument('--batches', type=int, default=300,
                         help='max batches in an epoch')
+    parser.add_argument('--weight_decay', type=float, default=0.0,
+                        help='optimizer weight decay')
     parser.add_argument('--vocabsize', type=int, default=20000,
                         help='how many words to get from glove')
     parser.add_argument('--optimizer', action='store_true',
@@ -218,7 +279,7 @@ def main():
                         help='use CUDA')
     parser.add_argument('--loginterval', type=int, default=100, metavar='N',
                         help='report interval')
-    parser.add_argument('--save', type=str,  default='',
+    parser.add_argument('--save_to', type=str,  default='autoencoder_3.pt',
                         help='path to save the final model')
     args = parser.parse_args()
 
@@ -230,7 +291,8 @@ def main():
     embedding = glove.module
     bilstm_encoder = BiLSTM(args.demb, args.dhid, args.nlayers, args.dropout)
     bilstm_decoder = BiLSTM(args.dhid, args.dhid, args.nlayers, args.dropout)
-    model = EmbeddingAutoencoder(embedding, bilstm_encoder, bilstm_decoder)
+    model = EmbeddingAutoencoder(embedding, bilstm_encoder, bilstm_decoder,
+        embed_size=args.squash_size)
 
     if args.cuda:
         model.cuda()
@@ -238,7 +300,7 @@ def main():
     reconstruction_loss = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(
             [param for param in model.parameters()
-                if param.requires_grad], lr=args.lr, weight_decay=0.000001)
+                if param.requires_grad], lr=args.lr, weight_decay=args.weight_decay)
 
     # model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, 
     #                     args.embinit, args.freezeemb, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize)])
@@ -248,10 +310,19 @@ def main():
     # Input: B x W LongTensor
     # Duplicate_matrix: B x B ByteTensor
     print('Starting.')
+    recent_rloss = 0
+    recent_dloss = 0
+    recent_sep = 0
     for (eid, batches) in enumerate(train_loader):
         total_cost = 0
         first_batch = True
-        for ind, (input, duplicate_matrix) in enumerate(batches):
+        print('Precomputing batches')
+        cur_batches = list(batches) # Precompute the batch.
+        dloss_gate0 = args.dloss_slope * (eid - args.dloss_shift)
+        dloss_gate = 1.0 / (1.0 + math.exp(-dloss_gate0))
+        dloss_factor = args.dloss_factor * dloss_gate
+        print('Epoch {} start, dloss_factor = {:.6f}'.format(eid, dloss_factor))
+        for ind, (input, duplicate_matrix) in enumerate(cur_batches):
             start_time = time.time()
             input = Variable(input)
             model.zero_grad()
@@ -260,11 +331,11 @@ def main():
             # RUN THE MODEL FOR THIS BATCH.
             if args.cuda and not input.is_cuda:
                 input = input.cuda()
-            auto, prob = model(input)
+            auto, prob = model(input, noise(stdev=args.noise_stdev))
             rloss = bsz * reconstruction_loss(
                     auto.view(-1, args.vocabsize), input.view(-1))
-            dloss = distance_loss(prob, Variable(duplicate_matrix))
-            loss = rloss + dloss
+            dloss, separation = distance_loss(prob, Variable(duplicate_matrix))
+            loss = rloss + dloss_factor * dloss
 
             if first_batch:
                 #print(input)
@@ -282,20 +353,26 @@ def main():
                     p.data.add_(-args.lr, p.grad.data)
 
             total_cost += loss.data[0]
+            recent_rloss = 0.9 * recent_rloss + 0.1 * rloss.data[0]
+            recent_dloss = 0.9 * recent_dloss + 0.1 * dloss.data[0]
+            recent_sep = 0.9 * recent_sep + 0.1 * separation.data[0]
 
+            #if ind > 100:
+                #return  # for testing only
             if ind % args.loginterval == 0 and ind > 0:
                 cur_loss = total_cost / (ind * args.batchsize)
                 elapsed = time.time() - start_time
                 print('Epoch {} | {:5d}/{} Batches | ms/batch {:5.2f} | '
-                        'loss {:.6f} {:.6f}'.format(
+                        'recent loss {:.6f} {:.6f} (sep {:.6f})'.format(
                             eid, ind, args.batches,
                             elapsed * 1000.0 / args.loginterval,
-                            rloss.data[0], dloss.data[0]))
+                            recent_rloss, recent_dloss, recent_sep))
 
+        print('Average loss: {:.6f}'.format(total_cost / len(cur_batches)))
         print('-' * 89)
-        with open('autoencoder.pt', 'wb') as f:
+        with open(args.save_to, 'wb') as f:
             torch.save(model, f)
-    with open('autoencoder_cpu.pt', 'wb') as f:
+    with open('cpu_' + args.save_to, 'wb') as f:
         model.cpu()
         torch.save(model, f)
 
