@@ -341,7 +341,7 @@ def main():
     bilstm_encoder = BiLSTM(args.demb, args.dhid, args.nlayers, args.dropout)
     bilstm_decoder = BiLSTM(args.demb, args.dhid, args.nlayers, args.dropout)
     model = EmbeddingAutoencoder(embedding, bilstm_encoder, bilstm_decoder,
-        embed_size=args.squash_size, cuda=args.cuda)
+        embed_size=args.squash_size, cuda=args.cuda, dropout=args.dropout)
 
     reconstruction_loss = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(
