@@ -22,6 +22,7 @@ class QuoraSlice:
             permute_trials=250,
             parent_model=None):
 
+        self.tfidf_embed = None
         if parent_model is None:
             self.sentence_length = sentence_length
 
@@ -43,14 +44,15 @@ class QuoraSlice:
             # ==================================================================
             # Count TF-IDF.
             # ==================================================================
-            print('Analyzing tf-idf.')
 
             tfidf = TfidfVectorizer(norm=None) # Norm none is important.
-            tfidf.fit(itertools.imap(lambda x: ' '.join(x), tfidf_corpus))
-            pickle.dump(tfidf, open('tfidf.pickle', 'wb'))
-            self.tfidf_embed = data.convert_tfidf_vectorizer(
-                    tfidf, self.glove_lookup)
-            print('tf-idf done.')
+            if tfidf_corpus is not None:
+                print('Analyzing tf-idf.')
+                tfidf.fit(itertools.imap(lambda x: ' '.join(x), tfidf_corpus))
+                pickle.dump(tfidf, open('tfidf.pickle', 'wb'))
+                self.tfidf_embed = data.convert_tfidf_vectorizer(
+                        tfidf, self.glove_lookup)
+                print('tf-idf done.')
 
             # Other modules/features.
             self.perm = features.Permute(\
@@ -64,8 +66,8 @@ class QuoraSlice:
                 'glove_embed',
                 'word_dim',
                 'vocab_size',
-                'sentence_length',
                 'tfidf_embed',
+                'sentence_length',
                 'perm'
             ]
             for atr in attributes:
@@ -85,11 +87,16 @@ class QuoraSlice:
         # ==================================================================
         # Embed: Get TF-IDF embeddings.
         # ==================================================================
-        print('Embedding dataset using tf-idf and glove...')
-        self.X_q1 = data.get_reweighted_embeddings(
-                self.tfidf_embed, self.glove_embed, Variable(self.q1_words))
-        self.X_q2 = data.get_reweighted_embeddings(
-                self.tfidf_embed, self.glove_embed, Variable(self.q2_words))
+        if self.tfidf_embed is not None:
+            print('Embedding dataset using tf-idf and glove...')
+            self.X_q1 = data.get_reweighted_embeddings(
+                    self.tfidf_embed, self.glove_embed, Variable(self.q1_words))
+            self.X_q2 = data.get_reweighted_embeddings(
+                    self.tfidf_embed, self.glove_embed, Variable(self.q2_words))
+        else:
+            print('Embedding dataset using glove...')
+            self.X_q1 = self.glove_embed(Variable(self.q1_words))
+            self.X_q2 = self.glove_embed(Variable(self.q2_words))
         print(self.X_q1.size())
 
         # ==================================================================
@@ -119,16 +126,16 @@ class QuoraSlice:
         # ==================================================================
         # Feature 3: KL-divergence based.
         # ==================================================================
-        print('KL divergence')
-        self.X_kl12 = features.apply(\
-                self.X_q1, self.X_q2,
-                features.elementwise_kl_div, print_every=100)
-        self.X_kl21 = features.apply(\
-                self.X_q2, self.X_q1,
-                features.elementwise_kl_div, print_every=100)
-        self.X_kls = features.apply(\
-                self.X_q2, self.X_q1,
-                features.symmetric_kl_div, print_every=100)
+        # print('KL divergence')
+        # self.X_kl12 = features.apply(\
+        #         self.X_q1, self.X_q2,
+        #         features.elementwise_kl_div, print_every=100)
+        # self.X_kl21 = features.apply(\
+        #         self.X_q2, self.X_q1,
+        #         features.elementwise_kl_div, print_every=100)
+        # self.X_kls = features.apply(\
+        #         self.X_q2, self.X_q1,
+        #         features.symmetric_kl_div, print_every=100)
 
         print('Catting all of this together')
         self.X_all = torch.cat([
@@ -136,10 +143,10 @@ class QuoraSlice:
             self.X_q2_mean,
             (self.X_q1_mean * self.X_q2_mean),
             self.X_permuted,
-            self.X_kl12,
-            self.X_kl21,
-            self.X_kls,
-            (self.X_kl12 * self.X_kl21)
+            # self.X_kl12,
+            # self.X_kl21,
+            # self.X_kls,
+            # (self.X_kl12 * self.X_kl21)
         ], 1)
 
         print('Done!')
