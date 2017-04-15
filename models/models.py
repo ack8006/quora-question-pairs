@@ -163,7 +163,7 @@ class EmbeddingAutoencoder(nn.Module):
           closely together.
     '''
     def __init__(self, word_embedding, bilstm_encoder, bilstm_decoder,
-            dropout=0.0, embed_size=20, glove=None):
+            dropout=0.0, embed_size=20, glove=None, cuda=False):
         '''Args:
             word_embedding: nn.Embedding - Word IDs to embeddings
             bilstm_encoder: BiLSTM - Sequence to hidden state
@@ -189,6 +189,10 @@ class EmbeddingAutoencoder(nn.Module):
                 self.bilstm_encoder.lstm.hidden_size)
         self.batchnorm_decode = nn.BatchNorm1d(
                 2 * self.bilstm_decoder.lstm.hidden_size)
+
+        self.is_cuda = cuda
+        if cuda:
+            self.cuda()
 
         assert self.word_embedding.embedding_dim == \
             self.bilstm_encoder.lstm.input_size
@@ -230,6 +234,7 @@ class EmbeddingAutoencoder(nn.Module):
         Returns:
             output: B x Seq_Len X D output class probabilities.'''
         # B x S x 2D
+        print(h0.size())
         h0 = self.init_hidden(X.size(0), self.bilstm_decoder.lstm)
         h0 = (h, h0[1])
         out, _, _ = self.bilstm_decoder(X, h0)
@@ -288,7 +293,7 @@ class EmbeddingAutoencoder(nn.Module):
         d_hid = lstm.hidden_size
         tup = (Variable(torch.zeros(layer_dir, batch_size, d_hid)), 
                 Variable(torch.zeros(layer_dir, batch_size, d_hid)))
-        if lstm.is_cuda:
+        if self.is_cuda:
             tup = (tup[0].cuda(), tup[1].cuda())
         return tup
 
