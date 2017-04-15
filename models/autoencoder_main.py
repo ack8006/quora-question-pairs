@@ -397,7 +397,7 @@ def main():
                 sloss = 0.0
                 if supp is not None:
                     sloss = bsz * reconstruction_loss(
-                            supp_auto.view(-1, args.vocabsize), input.view(-1))
+                            supp_auto.view(-1, args.vocabsize), supp.view(-1))
                     loss = loss + sloss_factor * sloss
 
                 if first_batch:
