@@ -74,11 +74,14 @@ def get_glove_embeddings(file_path, corpus, ntoken, nemb):
     return embeddings
 
 
-def evaluate(model, data_loader):
+def evaluate(model, data_loader, cuda):
     correct, total = 0, 0
     for ind, (qs, duplicate) in enumerate(data_loader):
         out = model(qs[:, 0, 0, :], qs[:, 0, 1, :])
         pred = out.data.max(1)[1]
+        if cuda:
+            pred = pred.cuda()
+            duplicate = duplicate.cuda()
         correct += (pred == duplicate).sum()
         total += len(pred)
     return correct / total 
@@ -177,9 +180,12 @@ def main():
         start_time = time.time()
         cur_loss = 0
         for ind, (qs, duplicate) in enumerate(train_loader):
-            duplicate = Variable(duplicate)
             model.zero_grad()
             pred = model(qs[:, 0, 0, :], qs[:, 0, 1, :])
+            if args.cuda:
+            	pred = pred.cuda()
+            	duplicate = duplicate.cuda()
+            duplicate = Variable(duplicate)
             loss = criterion(pred, duplicate)
             loss.backward()
             clip_grad_norm(model.parameters(), args.clip)
@@ -204,8 +210,8 @@ def main():
                 cur_loss = 0
 
         model.eval()
-        train_acc = evaluate(model, train_loader)
-        val_acc = evaluate(model, valid_loader)
+        train_acc = evaluate(model, train_loader, args.cuda())
+        val_acc = evaluate(model, valid_loader, args.cuda())
 
         print('Epoch: {} | Train Loss: {:.4f} | Train Accuracy: {:.4f} | Val Accuracy: {:.4f}'.format(
             epoch, total_cost, train_acc, val_acc))

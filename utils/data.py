@@ -1,7 +1,4 @@
-import os
 from collections import Counter, defaultdict
-import torch
-import random
 import numpy as np
 
 class Dictionary(object):
