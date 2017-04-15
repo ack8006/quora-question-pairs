@@ -189,7 +189,6 @@ class EmbeddingAutoencoder(nn.Module):
                 self.bilstm_encoder.lstm.hidden_size)
         self.batchnorm_decode = nn.BatchNorm1d(
                 2 * self.bilstm_decoder.lstm.hidden_size)
-        self.eye = torch.eye(100).cuda()
 
         assert self.word_embedding.embedding_dim == \
             self.bilstm_encoder.lstm.input_size
@@ -243,25 +242,21 @@ class EmbeddingAutoencoder(nn.Module):
         # B x S x 2D
         return torch.stack(words, dim=1)
 
-    def pair_probabilities(self, emb):
+    def pair_log_probabilities(self, emb):
         '''Args:
             emb1: B x H embeddings
         Returns:
-            dist: B x B matrix. Cell (i, j) is p(j|i) according to some
-                  likelihood function on pairs of data points.'''
+            log_probs: B x B matrix. Cell (i, j) is (unnormalized) log p(j|i)
+                  according to some likelihood function on pairs of data points.'''
         B = emb.size(0)
         emb = self.fc_embedding(emb)
-        probs = Variable(torch.FloatTensor(B, B)).cuda()
-        indicator = Variable(self.eye[:B, :B])
+        log_probs = Variable(torch.FloatTensor(B, B)).cuda()
         for row in range(B):
             diff = emb - emb[row].unsqueeze(0).repeat(B, 1) # B x H
             dist = (diff * diff).sum(dim=1) # B x 1
-            score = (-dist).exp() # Gaussian (ala SNE)
-            score = score + 1e-8  # Stabilizer
-            score = score - indicator[row] * score
-            probs[row] = score / score.sum().repeat(B) # Columns sum to 1
-        #print(probs[3])
-        return probs
+            log_probs[row] = -dist
+        #print(log_probs[3])
+        return log_probs
 
     def forward(self, X1, noise=None):
         '''Args:
@@ -273,7 +268,7 @@ class EmbeddingAutoencoder(nn.Module):
         X1 = self.drop(self.word_embedding(X1))
         h1, emb1 = self.encoder(X1, noise)
         auto_X1 = self.decoder(h1, X1)
-        prob = self.pair_probabilities(emb1)
+        prob = self.pair_log_probabilities(emb1)
         return auto_X1, prob
 
     def init_hidden(self, batch_size, lstm):

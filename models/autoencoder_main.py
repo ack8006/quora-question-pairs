@@ -112,8 +112,8 @@ def generate(args, qids, questions):
     # Is (q1, q2) a duplicate.
     dupset = set(duplist)
     # For q1, what are its duplicates.
-    dup_lookup = {qid: [] for qid in list(qids)}
-    idx_lookup = {qid: i for i, qid in enumerate(list(qids))}
+    dup_lookup = {qid: [] for qid in all_qids}
+    idx_lookup = {qid: i for i, qid in enumerate(all_qids)}
     for qid1, qid2 in duplist:
             dup_lookup[qid1].append(qid2)
 
@@ -133,7 +133,9 @@ def generate(args, qids, questions):
 
     def batch():
         np.random.shuffle(seeds)
+        np.random.shuffle(all_qids)
         seed_size = args.seed_size
+        qids_iter = itertools.cycle(all_qids)
         for dup_batch in xrange(0, len(seeds), seed_size): # Seed size
             if args.batches > 0 and dup_batch / seed_size > args.batches:
                 return
@@ -158,7 +160,13 @@ def generate(args, qids, questions):
                         extra.append(d)
 
             np.random.shuffle(extra)
-            batch = seed_ids + seed_id_pairs + extra[:(args.batchsize - len(seed_ids) * 2)]
+            batch = seed_ids + seed_id_pairs + extra[:(
+                args.batchsize - len(seed_ids) * 2)]
+            while len(batch) < args.batchsize:
+                qid = next(qids_iter)
+                if qid not in already:
+                    already[qid] = True
+                    batch.append(qid)
             np.random.shuffle(batch)
 
             mtx = np.zeros((len(batch), len(batch)), dtype=np.int32)
@@ -169,7 +177,8 @@ def generate(args, qids, questions):
 
             # Yield input, duplicate matrix
             indices = [idx_lookup[qid] for qid in batch]
-            yield questions[torch.LongTensor(indices).cuda()], torch.from_numpy(mtx).cuda()
+            yield questions[torch.LongTensor(indices).cuda()], \
+                torch.from_numpy(mtx).cuda()
 
     print('Analysis done. Ready to generate batches.')
     for e in range(args.epochs):
@@ -177,24 +186,33 @@ def generate(args, qids, questions):
 
 
 eye = torch.eye(120).cuda()
-def distance_loss(dist, duplicate_matrix):
+def distance_loss(log_prob, duplicate_matrix):
     '''Args:
-        dist: B*B sized array of differences.
+        log_prob: B*B sized array of log probabilities.
         duplicate_matrix: B*B array of is_duplicates.'''
     B = duplicate_matrix.size(0)
     duplicate_matrix = duplicate_matrix.float()
-    my_eye = eye[:B, :B]
-    non_duplicate_matrix = (1 - duplicate_matrix) - Variable(my_eye)
+    my_eye = Variable(eye[:B, :B])
+    non_duplicate_matrix = (1 - duplicate_matrix) - my_eye
+
+    # Calculate dist from logprob
+    prob = log_prob.exp() + 1e-8
+    prob = prob - (my_eye * prob)
+    prob = prob / prob.sum(dim=1).repeat(1, B)
+
     #print(duplicate_matrix)
     #print(non_duplicate_matrix)
 
-    pd = dist * duplicate_matrix
+    pd = prob * duplicate_matrix
+    # Set to 1 all cells that aren't probability of duplicate so we can
+    # take the min value.
     probability_dup = pd + (1 - duplicate_matrix)
-    probability_non = dist * non_duplicate_matrix
+    probability_non = prob * non_duplicate_matrix
 
-    min_dup = probability_dup.min(dim=1)[0]
-    max_dup = pd.max(dim=1)[0]
-    max_non = probability_non.max(dim=1)[0]
+    has_dup = duplicate_matrix.sum(dim=1).gt(0)
+    min_dup = probability_dup.min(dim=1)[0][has_dup]
+    max_dup = pd.max(dim=1)[0][has_dup]
+    max_non = probability_non.max(dim=1)[0][has_dup]
 
     # Hinge loss between lest likely duplicate and most likely non-duplicate.
     return (1 + max_non - min_dup).mean(), (max_dup - max_non).mean()
@@ -255,12 +273,6 @@ def main():
                         help='sentence embedding squash size')
     parser.add_argument('--seed_size', type=int, default=10,
                         help='how many seed points from which to sample duplicates')
-    parser.add_argument('--take_duplicates', type=int, default=10,
-                        help='how many duplicate points to take from each seed.')
-    parser.add_argument('--decinit', type=str, default='random',
-                        help='decoder weight initialization type')
-    parser.add_argument('--hidinit', type=str, default='random',
-                        help='recurrent hidden weight initialization type')
     parser.add_argument('--dropout', type=float, default=0.5,
                         help='dropout applied to layers (0 = no dropout)')
     parser.add_argument('--epochs', type=int, default=2,
@@ -302,10 +314,6 @@ def main():
             [param for param in model.parameters()
                 if param.requires_grad], lr=args.lr, weight_decay=args.weight_decay)
 
-    # model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, 
-    #                     args.embinit, args.freezeemb, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize)])
-    # print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | FreezeEmb | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize')
-    # print(model_config)
 
     # Input: B x W LongTensor
     # Duplicate_matrix: B x B ByteTensor
@@ -331,10 +339,10 @@ def main():
             # RUN THE MODEL FOR THIS BATCH.
             if args.cuda and not input.is_cuda:
                 input = input.cuda()
-            auto, prob = model(input, noise(stdev=args.noise_stdev))
+            auto, log_prob = model(input, noise(stdev=args.noise_stdev))
             rloss = bsz * reconstruction_loss(
                     auto.view(-1, args.vocabsize), input.view(-1))
-            dloss, separation = distance_loss(prob, Variable(duplicate_matrix))
+            dloss, separation = distance_loss(log_prob, Variable(duplicate_matrix))
             loss = rloss + dloss_factor * dloss
 
             if first_batch:
@@ -357,8 +365,8 @@ def main():
             recent_dloss = 0.9 * recent_dloss + 0.1 * dloss.data[0]
             recent_sep = 0.9 * recent_sep + 0.1 * separation.data[0]
 
-            #if ind > 100:
-                #return  # for testing only
+            if ind > 100:
+                return  # for testing only
             if ind % args.loginterval == 0 and ind > 0:
                 cur_loss = total_cost / (ind * args.batchsize)
                 elapsed = time.time() - start_time
