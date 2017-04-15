@@ -334,6 +334,9 @@ def main():
             [param for param in model.parameters()
                 if param.requires_grad], lr=args.lr, weight_decay=args.weight_decay)
 
+    def logistic(slope, shift, x):
+        gate0 = slope * (x - shift)
+        return 1.0 / (1.0 + math.exp(-gate0))
 
     # Input: B x W LongTensor
     # Duplicate_matrix: B x B ByteTensor
@@ -350,8 +353,7 @@ def main():
             first_batch = True
             print('Precomputing batches')
             cur_batches = list(batches) # Precompute the batch.
-            dloss_gate0 = args.dloss_slope * (eid - args.dloss_shift)
-            dloss_gate = 1.0 / (1.0 + math.exp(-dloss_gate0))
+            dloss_gate = logistic(args.dloss_slope, args.dloss_shift)
             dloss_factor = args.dloss_factor * dloss_gate
             print('Epoch {} start, dloss_factor = {:.6f}'.format(eid, dloss_factor))
             for ind, (input, duplicate_matrix) in enumerate(cur_batches):
