@@ -190,8 +190,9 @@ class EmbeddingAutoencoder(nn.Module):
         self.batchnorm_decode = nn.BatchNorm1d(
                 2 * self.bilstm_decoder.lstm.hidden_size)
 
-        self.is_cuda = cuda
+        self.is_cuda = False
         if cuda:
+            self.is_cuda = True
             self.cuda()
 
         assert self.word_embedding.embedding_dim == \

@@ -364,6 +364,7 @@ def main():
         eye = eye.cuda()
     try:
         for (eid, batches) in enumerate(train_loader):
+            model.train()
             total_cost = 0
             first_batch = True
             print('Precomputing batches')
