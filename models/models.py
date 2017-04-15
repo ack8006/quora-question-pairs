@@ -286,8 +286,11 @@ class EmbeddingAutoencoder(nn.Module):
     def init_hidden(self, batch_size, lstm):
         layer_dir = lstm.num_layers * 2
         d_hid = lstm.hidden_size
-        return (Variable(torch.zeros(layer_dir, batch_size, d_hid).cuda()), 
-                Variable(torch.zeros(layer_dir, batch_size, d_hid).cuda()))
+        tup = (Variable(torch.zeros(layer_dir, batch_size, d_hid)), 
+                Variable(torch.zeros(layer_dir, batch_size, d_hid)))
+        if lstm.is_cuda:
+            tup = (tup[0].cuda(), tup[1].cuda())
+        return tup
 
 
 
