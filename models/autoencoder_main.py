@@ -321,68 +321,71 @@ def main():
     recent_rloss = 0
     recent_dloss = 0
     recent_sep = 0
-    for (eid, batches) in enumerate(train_loader):
-        total_cost = 0
-        first_batch = True
-        print('Precomputing batches')
-        cur_batches = list(batches) # Precompute the batch.
-        dloss_gate0 = args.dloss_slope * (eid - args.dloss_shift)
-        dloss_gate = 1.0 / (1.0 + math.exp(-dloss_gate0))
-        dloss_factor = args.dloss_factor * dloss_gate
-        print('Epoch {} start, dloss_factor = {:.6f}'.format(eid, dloss_factor))
-        for ind, (input, duplicate_matrix) in enumerate(cur_batches):
-            start_time = time.time()
-            input = Variable(input)
-            model.zero_grad()
-            bsz = input.size(0)
+    try:
+        for (eid, batches) in enumerate(train_loader):
+            total_cost = 0
+            first_batch = True
+            print('Precomputing batches')
+            cur_batches = list(batches) # Precompute the batch.
+            dloss_gate0 = args.dloss_slope * (eid - args.dloss_shift)
+            dloss_gate = 1.0 / (1.0 + math.exp(-dloss_gate0))
+            dloss_factor = args.dloss_factor * dloss_gate
+            print('Epoch {} start, dloss_factor = {:.6f}'.format(eid, dloss_factor))
+            for ind, (input, duplicate_matrix) in enumerate(cur_batches):
+                start_time = time.time()
+                input = Variable(input)
+                model.zero_grad()
+                bsz = input.size(0)
 
-            # RUN THE MODEL FOR THIS BATCH.
-            if args.cuda and not input.is_cuda:
-                input = input.cuda()
-            auto, log_prob = model(input, noise(stdev=args.noise_stdev))
-            rloss = bsz * reconstruction_loss(
-                    auto.view(-1, args.vocabsize), input.view(-1))
-            dloss, separation = distance_loss(log_prob, Variable(duplicate_matrix))
-            loss = rloss + dloss_factor * dloss
+                # RUN THE MODEL FOR THIS BATCH.
+                if args.cuda and not input.is_cuda:
+                    input = input.cuda()
+                auto, log_prob = model(input, noise(stdev=args.noise_stdev))
+                rloss = bsz * reconstruction_loss(
+                        auto.view(-1, args.vocabsize), input.view(-1))
+                dloss, separation = distance_loss(log_prob, Variable(duplicate_matrix))
+                loss = rloss + dloss_factor * dloss
 
-            if first_batch:
-                #print(input)
-                #print(duplicate_matrix)
-                #print(prob)
-                first_batch = False
+                if first_batch:
+                    #print(input)
+                    #print(duplicate_matrix)
+                    #print(prob)
+                    first_batch = False
 
-            loss.backward()
-            clip_grad_norm(model.parameters(), args.clip)
+                loss.backward()
+                clip_grad_norm(model.parameters(), args.clip)
 
-            if optimizer:
-                optimizer.step()
-            else:
-                for p in model.parameters():
-                    p.data.add_(-args.lr, p.grad.data)
+                if optimizer:
+                    optimizer.step()
+                else:
+                    for p in model.parameters():
+                        p.data.add_(-args.lr, p.grad.data)
 
-            total_cost += loss.data[0]
-            recent_rloss = 0.9 * recent_rloss + 0.1 * rloss.data[0]
-            recent_dloss = 0.9 * recent_dloss + 0.1 * dloss.data[0]
-            recent_sep = 0.9 * recent_sep + 0.1 * separation.data[0]
+                total_cost += loss.data[0]
+                recent_rloss = 0.9 * recent_rloss + 0.1 * rloss.data[0]
+                recent_dloss = 0.9 * recent_dloss + 0.1 * dloss.data[0]
+                recent_sep = 0.9 * recent_sep + 0.1 * separation.data[0]
 
-            if ind > 100:
-                return  # for testing only
-            if ind % args.loginterval == 0 and ind > 0:
-                cur_loss = total_cost / (ind * args.batchsize)
-                elapsed = time.time() - start_time
-                print('Epoch {} | {:5d}/{} Batches | ms/batch {:5.2f} | '
-                        'recent loss {:.6f} {:.6f} (sep {:.6f})'.format(
-                            eid, ind, args.batches,
-                            elapsed * 1000.0 / args.loginterval,
-                            recent_rloss, recent_dloss, recent_sep))
+                #if ind > 100:
+                    #return  # for testing only
+                if ind % args.loginterval == 0 and ind > 0:
+                    cur_loss = total_cost / (ind * args.batchsize)
+                    elapsed = time.time() - start_time
+                    print('Epoch {} | {:5d}/{} Batches | ms/batch {:5.2f} | '
+                            'recent loss {:.6f} {:.6f} (sep {:.6f})'.format(
+                                eid, ind, args.batches,
+                                elapsed * 1000.0 / args.loginterval,
+                                recent_rloss, recent_dloss, recent_sep))
 
-        print('Average loss: {:.6f}'.format(total_cost / len(cur_batches)))
-        print('-' * 89)
-        with open(args.save_to, 'wb') as f:
+            print('Average loss: {:.6f}'.format(total_cost / len(cur_batches)))
+            print('-' * 89)
+            with open(args.save_to, 'wb') as f:
+                torch.save(model, f)
+    finally:
+        print('Done. Saving cpu model')
+        with open('cpu_' + args.save_to, 'wb') as f:
+            model.cpu()
             torch.save(model, f)
-    with open('cpu_' + args.save_to, 'wb') as f:
-        model.cpu()
-        torch.save(model, f)
 
 
 if __name__ == '__main__':
