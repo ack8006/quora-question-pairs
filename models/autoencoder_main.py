@@ -100,7 +100,7 @@ def generate_supplement(args, questions):
         for batch in xrange(0, len(indices), args.batchsize): # Seed size
             batch_indices = indices[batch:(batch + args.batchsize)]
             yield cd(questions[torch.LongTensor(batch_indices)])
-def cache(x, batchsize=1000):
+def cache(x, batchsize=250):
     cache = []
     for item in x:
         if len(cache) == batchsize:
@@ -367,14 +367,16 @@ def main():
             total_cost = 0
             first_batch = True
             print('Precomputing batches')
-            cur_batches = list(batches) # Precompute the batch.
+            cur_batches = cache(batches) # Precompute the batch.
             dloss_gate = logistic(args.dloss_slope, args.dloss_shift, eid)
             dloss_factor = args.dloss_factor * dloss_gate
             sloss_factor = args.sloss_factor * logistic(
                 args.dloss_slope, args.sloss_shift, eid)
             print('Epoch {} start, dloss_factor = {:.6f}, sloss_factor={:.6f}'.\
                     format(eid, dloss_factor, sloss_factor))
+            batchcount = 0
             for ind, (input, duplicate_matrix) in enumerate(cur_batches):
+                batchcount = ind + 1
                 start_time = time.time()
                 input = Variable(input)
                 model.zero_grad()
@@ -427,13 +429,13 @@ def main():
                     cur_loss = total_cost / (ind * args.batchsize)
                     elapsed = time.time() - start_time
                     print('Epoch {} | {:5d}/{} Batches | ms/batch {:5.2f} | '
-                            'losses r{:.6f} d{:.6f} s{:.6f} (sep {:.6f})'.format(
+                            'losses r{:.6f} s{:.6f} d{:.6f} (sep {:.6f})'.format(
                                 eid, ind, args.batches,
                                 elapsed * 1000.0 / args.loginterval,
-                                recent_rloss, recent_dloss, recent_sloss, recent_sep))
+                                recent_rloss, recent_sloss, recent_dloss, recent_sep))
 
-            print('Average loss: {:.6f}'.format(total_cost / len(cur_batches)))
-            print('-' * 89)
+            print('Average loss: {:.6f}'.format(total_cost / batchcount))
+            print('-' * 110)
             with open(args.save_to, 'wb') as f:
                 torch.save(model, f)
     finally:
