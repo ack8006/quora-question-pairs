@@ -96,12 +96,13 @@ def load_glove(args):
 
 def generate_supplement(args, questions):
     indices = range(len(questions))
+    cd = lambda x: x if not args.cuda else x.cuda()
 
     while True:
         np.random.shuffle(indices)
         for batch in xrange(0, len(indices), args.batchsize): # Seed size
             batch_indices = indices[batch:(batch + args.batchsize)]
-            yield questions[torch.LongTensor(indices).cuda()]
+            yield questions[cd(torch.LongTensor(indices))]
 
 
 def generate(args, qids, questions):
@@ -185,16 +186,18 @@ def generate(args, qids, questions):
 
             # Yield input, duplicate matrix
             indices = [idx_lookup[qid] for qid in batch]
-            yield questions[torch.LongTensor(indices).cuda()], \
-                torch.from_numpy(mtx).cuda()
+            ret = (questions[torch.LongTensor(indices)], torch.from_numpy(mtx))
+            if args.cuda:
+                yield (ret[0].cuda(), ret[1].cuda())
+            else:
+                yield ret
 
     print('Analysis done. Ready to generate batches.')
     for e in range(args.epochs):
         yield batch()
 
 
-eye = torch.eye(120).cuda()
-def distance_loss(log_prob, duplicate_matrix):
+def distance_loss(log_prob, duplicate_matrix, eye):
     '''Args:
         log_prob: B*B sized array of log probabilities.
         duplicate_matrix: B*B array of is_duplicates.'''
@@ -226,13 +229,16 @@ def distance_loss(log_prob, duplicate_matrix):
     return (1 + max_non - min_dup).mean(), (max_dup - max_non).mean()
 
 
-def noise(stdev=0.05, batch_size=50):
+def noise(args):
+    stdev = args.noise_stdev
+    batch_size = args.batchsize
+    cd = lambda x: x if not args.cuda else x.cuda()
     for_size = {}
     def generate_noise(size):
         if size not in for_size:
             def gen():
                 while True:
-                    batch = [Variable(torch.randn(size).cuda() * stdev)
+                    batch = [Variable(cd(torch.randn(size)) * stdev)
                         for i in xrange(batch_size)]
                     for b in batch:
                         yield b
@@ -338,6 +344,9 @@ def main():
     recent_rloss = 0
     recent_dloss = 0
     recent_sep = 0
+    eye = torch.eye(200)
+    if args.cuda:
+        eye = eye.cuda()
     try:
         for (eid, batches) in enumerate(train_loader):
             total_cost = 0
@@ -361,10 +370,11 @@ def main():
                 if supplement_loader is not None:
                     supp = next(supplement_loader)
                 auto, log_prob, supp_auto = \
-                    model(input, noise(stdev=args.noise_stdev), supp)
+                    model(input, noise(args), supp)
                 rloss = bsz * reconstruction_loss(
                         auto.view(-1, args.vocabsize), input.view(-1))
-                dloss, separation = distance_loss(log_prob, Variable(duplicate_matrix))
+                dloss, separation = distance_loss(
+                        log_prob, Variable(duplicate_matrix), eye)
                 loss = rloss + dloss_factor * dloss
                 
                 if supp is not None:

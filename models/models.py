@@ -250,7 +250,9 @@ class EmbeddingAutoencoder(nn.Module):
                   according to some likelihood function on pairs of data points.'''
         B = emb.size(0)
         emb = self.fc_embedding(emb)
-        log_probs = Variable(torch.FloatTensor(B, B)).cuda()
+        log_probs = Variable(torch.FloatTensor(B, B))
+        if emb.is_cuda:
+            log_probs = log_probs.cuda()
         for row in range(B):
             diff = emb - emb[row].unsqueeze(0).repeat(B, 1) # B x H
             dist = (diff * diff).sum(dim=1) # B x 1
