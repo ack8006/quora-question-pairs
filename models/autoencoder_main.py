@@ -50,9 +50,6 @@ def load_data(args, path, glove, limit=1000000):
 
     print('Cleaning and Tokenizing')
     qid, q = clean_and_tokenize(args, train_data, glove.dictionary, limit)
-    if args.cuda:
-        qid = qid.cuda()
-        q = q.cuda()
 
     return qid, q
 
@@ -102,7 +99,17 @@ def generate_supplement(args, questions):
         np.random.shuffle(indices)
         for batch in xrange(0, len(indices), args.batchsize): # Seed size
             batch_indices = indices[batch:(batch + args.batchsize)]
-            yield questions[cd(torch.LongTensor(indices))]
+            yield cd(questions[torch.LongTensor(indices)])
+def cache(x, batchsize=30):
+    cache = []
+    for item in x:
+        if len(cache) == batchsize:
+            for c in cache:
+                yield c
+            cache = []
+        cache.append(item)
+    for c in cache:
+        yield c
 
 
 def generate(args, qids, questions):
@@ -186,11 +193,12 @@ def generate(args, qids, questions):
 
             # Yield input, duplicate matrix
             indices = [idx_lookup[qid] for qid in batch]
-            ret = (questions[torch.LongTensor(indices)], torch.from_numpy(mtx))
+            mtx = torch.from_numpy(mtx)
+            ind = torch.LongTensor(indices)
             if args.cuda:
-                yield (ret[0].cuda(), ret[1].cuda())
-            else:
-                yield ret
+                ind = ind.cuda()
+                mtx = mtx.cuda()
+            yield (questions[ind], mtx)
 
     print('Analysis done. Ready to generate batches.')
     for e in range(args.epochs):
@@ -261,6 +269,8 @@ def main():
                         help='location of the pretrained glove embeddings')
     parser.add_argument('--max_sentences', type=int, default=1000000,
                         help='max num of sentences to train on')
+    parser.add_argument('--max_supplement', type=int, default=1000000,
+                        help='max num of supplemental sentences to train on')
     parser.add_argument('--din', type=int, default=30,
                         help='length of LSTM')
     parser.add_argument('--demb', type=int, default=100,
@@ -320,8 +330,8 @@ def main():
 
     supplement_loader = None
     if args.supplement is not None:
-        sid, supplement = load_data(args, args.supplement, glove)
-        supplement_loader = generate_supplement(args, supplement)
+        sid, supplement = load_data(args, args.supplement, glove, args.max_supplement)
+        supplement_loader = cache(generate_supplement(args, supplement))
 
     embedding = glove.module
     bilstm_encoder = BiLSTM(args.demb, args.dhid, args.nlayers, args.dropout)
