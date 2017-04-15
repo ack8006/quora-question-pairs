@@ -353,7 +353,7 @@ def main():
             first_batch = True
             print('Precomputing batches')
             cur_batches = list(batches) # Precompute the batch.
-            dloss_gate = logistic(args.dloss_slope, args.dloss_shift)
+            dloss_gate = logistic(args.dloss_slope, args.dloss_shift, eid)
             dloss_factor = args.dloss_factor * dloss_gate
             print('Epoch {} start, dloss_factor = {:.6f}'.format(eid, dloss_factor))
             for ind, (input, duplicate_matrix) in enumerate(cur_batches):
@@ -367,7 +367,7 @@ def main():
                     input = input.cuda()
                 supp = None
                 if supplement_loader is not None:
-                    supp = next(supplement_loader)
+                    supp = Variable(next(supplement_loader))
                 auto, log_prob, supp_auto = \
                     model(input, noise(args), supp)
                 rloss = bsz * reconstruction_loss(
