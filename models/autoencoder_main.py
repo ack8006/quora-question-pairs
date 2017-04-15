@@ -100,7 +100,7 @@ def generate_supplement(args, questions):
         for batch in xrange(0, len(indices), args.batchsize): # Seed size
             batch_indices = indices[batch:(batch + args.batchsize)]
             yield cd(questions[torch.LongTensor(batch_indices)])
-def cache(x, batchsize=100):
+def cache(x, batchsize=1000):
     cache = []
     for item in x:
         if len(cache) == batchsize:
@@ -293,6 +293,8 @@ def main():
                         help='distance loss scaling')
     parser.add_argument('--dloss_shift', type=int, default=4,
                         help='when should dloss gating reach 0.5')
+    parser.add_argument('--sloss_shift', type=int, default=4,
+                        help='when should sloss gating reach 0.5')
     parser.add_argument('--dloss_slope', type=float, default=1.0,
                         help='how quickly dloss goes from 0...1')
     parser.add_argument('--embinit', type=str, default='random',
@@ -365,7 +367,7 @@ def main():
             cur_batches = list(batches) # Precompute the batch.
             dloss_gate = logistic(args.dloss_slope, args.dloss_shift, eid)
             dloss_factor = args.dloss_factor * dloss_gate
-            sloss_factor = args.sloss_factor * logistic(1.0, 6.0, eid)
+            sloss_factor = args.sloss_factor * logistic(1.0, args.sloss_shift, eid)
             print('Epoch {} start, dloss_factor = {:.6f}, sloss_factor={:.6f}'.\
                     format(eid, dloss_factor, sloss_factor))
             for ind, (input, duplicate_matrix) in enumerate(cur_batches):
