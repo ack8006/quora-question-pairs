@@ -196,10 +196,12 @@ class EmbeddingAutoencoder(nn.Module):
 
         assert self.word_embedding.embedding_dim == \
             self.bilstm_encoder.lstm.input_size
+        assert self.word_embedding.embedding_dim == \
+            self.bilstm_decoder.lstm.input_size
         assert self.bilstm_encoder.lstm.num_layers == \
             self.bilstm_decoder.lstm.num_layers
         assert self.bilstm_encoder.lstm.hidden_size == \
-            self.bilstm_decoder.lstm.input_size
+            self.bilstm_decoder.lstm.hidden_size
         assert self.bilstm_encoder.lstm.hidden_size * 2 == \
             self.fc_decoder.fc.in_features # Last layer only
         assert self.fc_decoder.fc.out_features == \
@@ -234,7 +236,6 @@ class EmbeddingAutoencoder(nn.Module):
         Returns:
             output: B x Seq_Len X D output class probabilities.'''
         # B x S x 2D
-        print(h0.size())
         h0 = self.init_hidden(X.size(0), self.bilstm_decoder.lstm)
         h0 = (h, h0[1])
         out, _, _ = self.bilstm_decoder(X, h0)
