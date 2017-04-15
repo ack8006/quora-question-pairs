@@ -41,7 +41,7 @@ nlp = spacy.load('en', parser=False)
 # log_interval = 200
 
 
-def load_data(args, path, glove):
+def load_data(args, path, glove, limit=1000000):
     print('Loading Data')
     data = pd.read_csv(path, encoding='utf-8')
     data.columns = ['qid', 'question']
@@ -49,14 +49,14 @@ def load_data(args, path, glove):
     train_data = data.iloc[:int(len(data)*0.8)]
 
     print('Cleaning and Tokenizing')
-    qid, q = clean_and_tokenize(args, train_data, glove.dictionary)
+    qid, q = clean_and_tokenize(args, train_data, glove.dictionary, limit)
     if args.cuda:
         qid = qid.cuda()
         q = q.cuda()
 
     return qid, q
 
-def clean_and_tokenize(args, train_data, dictionary):
+def clean_and_tokenize(args, train_data, dictionary, limit):
     def to_indices(words):
         ql = [dictionary.get(str(w).lower(), dictionary['<unk>']) for w in words]
         qv = np.ones(args.din, dtype=int) * dictionary['<pad>'] # all padding
@@ -66,11 +66,11 @@ def clean_and_tokenize(args, train_data, dictionary):
     qids = []
     qs = []
     processed = 0
-    print('Reading max:', args.max_sentences)
+    print('Reading max:', limit)
     for example in train_data.itertuples():
         if processed % 10000 == 0:
             print('processed {0}'.format(processed))
-        if processed > args.max_sentences:
+        if processed > limit:
             break
         tokens = nlp(example.question, parse=False)
         qids.append(example.qid)
@@ -315,7 +315,7 @@ def main():
 
     assert args.demb in (50, 100, 200, 300)
     glove = load_glove(args)
-    qid, questions = load_data(args, args.data, glove)
+    qid, questions = load_data(args, args.data, glove, args.max_sentences)
     train_loader = generate(args, qid, questions)
 
     supplement_loader = None
