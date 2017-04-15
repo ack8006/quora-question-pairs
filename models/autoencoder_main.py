@@ -355,7 +355,9 @@ def main():
             cur_batches = list(batches) # Precompute the batch.
             dloss_gate = logistic(args.dloss_slope, args.dloss_shift, eid)
             dloss_factor = args.dloss_factor * dloss_gate
-            print('Epoch {} start, dloss_factor = {:.6f}'.format(eid, dloss_factor))
+            sloss_factor = args.sloss_factor * logistic(1.0, 6.0, eid)
+            print('Epoch {} start, dloss_factor = {:.6f}, sloss_factor={:.6f}'.\
+                    format(eid, dloss_factor, sloss_factor))
             for ind, (input, duplicate_matrix) in enumerate(cur_batches):
                 start_time = time.time()
                 input = Variable(input)
@@ -379,7 +381,7 @@ def main():
                 if supp is not None:
                     sloss = bsz * reconstruction_loss(
                             supp_auto.view(-1, args.vocabsize), input.view(-1))
-                    loss = loss + args.sloss_factor * sloss
+                    loss = loss + sloss_factor * sloss
 
                 if first_batch:
                     #print(input)
