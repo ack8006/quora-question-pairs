@@ -295,6 +295,8 @@ def main():
                         help='when should dloss gating reach 0.5')
     parser.add_argument('--sloss_shift', type=int, default=4,
                         help='when should sloss gating reach 0.5')
+    parser.add_argument('--sloss_slope', type=float, default=1.0,
+                        help='when should sloss gating reach 0.5')
     parser.add_argument('--dloss_slope', type=float, default=1.0,
                         help='how quickly dloss goes from 0...1')
     parser.add_argument('--embinit', type=str, default='random',
@@ -355,6 +357,7 @@ def main():
     print('Starting.')
     recent_rloss = 0
     recent_dloss = 0
+    recent_sloss = 0
     recent_sep = 0
     eye = torch.eye(200)
     if args.cuda:
@@ -367,7 +370,8 @@ def main():
             cur_batches = list(batches) # Precompute the batch.
             dloss_gate = logistic(args.dloss_slope, args.dloss_shift, eid)
             dloss_factor = args.dloss_factor * dloss_gate
-            sloss_factor = args.sloss_factor * logistic(1.0, args.sloss_shift, eid)
+            sloss_factor = args.sloss_factor * logistic(
+                args.dloss_slope, args.sloss_shift, eid)
             print('Epoch {} start, dloss_factor = {:.6f}, sloss_factor={:.6f}'.\
                     format(eid, dloss_factor, sloss_factor))
             for ind, (input, duplicate_matrix) in enumerate(cur_batches):
@@ -389,7 +393,8 @@ def main():
                 dloss, separation = distance_loss(
                         log_prob, Variable(duplicate_matrix), eye)
                 loss = rloss + dloss_factor * dloss
-                
+
+                sloss = 0.0
                 if supp is not None:
                     sloss = bsz * reconstruction_loss(
                             supp_auto.view(-1, args.vocabsize), input.view(-1))
@@ -411,8 +416,9 @@ def main():
                         p.data.add_(-args.lr, p.grad.data)
 
                 total_cost += loss.data[0]
-                recent_rloss = 0.9 * recent_rloss + 0.1 * rloss.data[0]
-                recent_dloss = 0.9 * recent_dloss + 0.1 * dloss.data[0]
+                recent_rloss = 0.95 * recent_rloss + 0.05 * rloss.data[0]
+                recent_dloss = 0.95 * recent_dloss + 0.05 * dloss.data[0]
+                recent_sloss = 0.95 * recent_sloss + 0.05 * sloss.data[0]
                 recent_sep = 0.9 * recent_sep + 0.1 * separation.data[0]
 
                 #if ind > 100:
@@ -421,10 +427,10 @@ def main():
                     cur_loss = total_cost / (ind * args.batchsize)
                     elapsed = time.time() - start_time
                     print('Epoch {} | {:5d}/{} Batches | ms/batch {:5.2f} | '
-                            'recent loss {:.6f} {:.6f} (sep {:.6f})'.format(
+                            'losses r{:.6f} d{:.6f} s{:.6f} (sep {:.6f})'.format(
                                 eid, ind, args.batches,
                                 elapsed * 1000.0 / args.loginterval,
-                                recent_rloss, recent_dloss, recent_sep))
+                                recent_rloss, recent_dloss, recent_sloss, recent_sep))
 
             print('Average loss: {:.6f}'.format(total_cost / len(cur_batches)))
             print('-' * 89)
