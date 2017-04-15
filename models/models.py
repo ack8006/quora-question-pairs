@@ -258,9 +258,11 @@ class EmbeddingAutoencoder(nn.Module):
         #print(log_probs[3])
         return log_probs
 
-    def forward(self, X1, noise=None):
+    def forward(self, X1, noise=None, Xs=None):
         '''Args:
             X1: B x Seq_Len word tokens
+            noise: noise generator to use in training
+            Xs: Supplemental data for autoencoder
         Returns:
             auto_X1: autoencoded X1 (B x Seq_Len x W) log-probabilities
             prob: pairwise probabilities between X1 and X2 FloatTensor Variable
@@ -269,7 +271,15 @@ class EmbeddingAutoencoder(nn.Module):
         h1, emb1 = self.encoder(X1, noise)
         auto_X1 = self.decoder(h1, X1)
         prob = self.pair_log_probabilities(emb1)
-        return auto_X1, prob
+
+        auto_Xs = None
+        if Xs is not None:
+            # Run the examples on other supplemental data.
+            Xs = self.drop(self.word_embedding(Xs))
+            hs, embs = self.encoder(Xs, noise)
+            auto_Xs = self.decoder(hs, Xs)
+            
+        return auto_X1, prob, auto_Xs
 
     def init_hidden(self, batch_size, lstm):
         layer_dir = lstm.num_layers * 2

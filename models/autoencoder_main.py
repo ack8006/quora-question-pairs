@@ -41,11 +41,10 @@ nlp = spacy.load('en', parser=False)
 # log_interval = 200
 
 
-def load_data(args, glove):
+def load_data(args, path, glove):
     print('Loading Data')
-    data = pd.read_csv(args.data, encoding='utf-8')
+    data = pd.read_csv(path, encoding='utf-8')
     data.columns = ['qid', 'question']
-    duplicates = pd.read_csv(args.duplicates)
 
     train_data = data.iloc[:int(len(data)*0.8)]
 
@@ -94,6 +93,15 @@ def load_glove(args):
             '{1}/glove.6B.{0}d.txt'.format(args.demb, args.glovedata),
             max_words=args.vocabsize)
     return LoadedGlove(glove)
+
+def generate_supplement(args, questions):
+    indices = range(len(questions))
+
+    while True:
+        np.random.shuffle(indices)
+        for batch in xrange(0, len(indices), args.batchsize): # Seed size
+            batch_indices = indices[batch:(batch + args.batchsize)]
+            yield questions[torch.LongTensor(indices).cuda()]
 
 
 def generate(args, qids, questions):
@@ -239,6 +247,8 @@ def main():
     parser = argparse.ArgumentParser(description='PyTorch Quora RNN/LSTM Language Model')
     parser.add_argument('--data', type=str, default='../data/all_questions.csv',
                         help='location of the data corpus')
+    parser.add_argument('--supplement', type=str, default=None,
+                        help='unlabeled supplemental data')
     parser.add_argument('--duplicates', type=str, default='../data/unique_duplicates.csv',
                         help='location of the data corpus')
     parser.add_argument('--glovedata', type=str, default='../data/',
@@ -261,6 +271,8 @@ def main():
                         help='gradient clipping')
     parser.add_argument('--noise_stdev', type=float, default=0.05,
                         help='noise distribution standard deviation')
+    parser.add_argument('--sloss_factor', type=float, default=0.1,
+                        help='supplemental loss scaling')
     parser.add_argument('--dloss_factor', type=float, default=1.0,
                         help='distance loss scaling')
     parser.add_argument('--dloss_shift', type=int, default=4,
@@ -297,8 +309,13 @@ def main():
 
     assert args.demb in (50, 100, 200, 300)
     glove = load_glove(args)
-    qid, questions = load_data(args, glove)
+    qid, questions = load_data(args, args.data, glove)
     train_loader = generate(args, qid, questions)
+
+    supplement_loader = None
+    if args.supplement is not None:
+        sid, supplement = load_data(args, args.supplement, glove)
+        supplement_loader = generate_supplement(args, supplement)
 
     embedding = glove.module
     bilstm_encoder = BiLSTM(args.demb, args.dhid, args.nlayers, args.dropout)
@@ -340,11 +357,20 @@ def main():
                 # RUN THE MODEL FOR THIS BATCH.
                 if args.cuda and not input.is_cuda:
                     input = input.cuda()
-                auto, log_prob = model(input, noise(stdev=args.noise_stdev))
+                supp = None
+                if supplement_loader is not None:
+                    supp = next(supplement_loader)
+                auto, log_prob, supp_auto = \
+                    model(input, noise(stdev=args.noise_stdev), supp)
                 rloss = bsz * reconstruction_loss(
                         auto.view(-1, args.vocabsize), input.view(-1))
                 dloss, separation = distance_loss(log_prob, Variable(duplicate_matrix))
                 loss = rloss + dloss_factor * dloss
+                
+                if supp is not None:
+                    sloss = bsz * reconstruction_loss(
+                            supp_auto.view(-1, args.vocabsize), input.view(-1))
+                    loss = loss + args.sloss_factor * sloss
 
                 if first_batch:
                     #print(input)
