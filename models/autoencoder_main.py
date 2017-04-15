@@ -99,8 +99,8 @@ def generate_supplement(args, questions):
         np.random.shuffle(indices)
         for batch in xrange(0, len(indices), args.batchsize): # Seed size
             batch_indices = indices[batch:(batch + args.batchsize)]
-            yield cd(questions[torch.LongTensor(indices)])
-def cache(x, batchsize=30):
+            yield cd(questions[torch.LongTensor(batch_indices)])
+def cache(x, batchsize=100):
     cache = []
     for item in x:
         if len(cache) == batchsize:
@@ -194,11 +194,11 @@ def generate(args, qids, questions):
             # Yield input, duplicate matrix
             indices = [idx_lookup[qid] for qid in batch]
             mtx = torch.from_numpy(mtx)
-            ind = torch.LongTensor(indices)
+            batch_qs = questions[torch.LongTensor(indices)]
             if args.cuda:
-                ind = ind.cuda()
+                batch_qs = batch_qs.cuda()
                 mtx = mtx.cuda()
-            yield (questions[ind], mtx)
+            yield (batch_qs, mtx)
 
     print('Analysis done. Ready to generate batches.')
     for e in range(args.epochs):
