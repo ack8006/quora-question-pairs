@@ -307,6 +307,8 @@ def main():
                         help='how many seed points from which to sample duplicates')
     parser.add_argument('--dropout', type=float, default=0.5,
                         help='dropout applied to layers (0 = no dropout)')
+    parser.add_argument('--more_dropout', action='store_true',
+                        help='activate dropout on the embedding layers')
     parser.add_argument('--epochs', type=int, default=2,
                         help='epochs to train against.')
     parser.add_argument('--batchsize', type=int, default=25, metavar='N',
@@ -340,8 +342,12 @@ def main():
     embedding = glove.module
     bilstm_encoder = BiLSTM(args.demb, args.dhid, args.nlayers, args.dropout)
     bilstm_decoder = BiLSTM(args.demb, args.dhid, args.nlayers, args.dropout)
+    emb_dropout = 0.0
+    if args.more_dropout:
+        emb_dropout = args.dropout
     model = EmbeddingAutoencoder(embedding, bilstm_encoder, bilstm_decoder,
-        embed_size=args.squash_size, cuda=args.cuda, dropout=args.dropout)
+        embed_size=args.squash_size, cuda=args.cuda, dropout=emb_dropout)
+    print(model)
 
     reconstruction_loss = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(
