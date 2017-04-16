@@ -210,8 +210,8 @@ def main():
                 cur_loss = 0
 
         model.eval()
-        train_acc = evaluate(model, train_loader, args.cuda())
-        val_acc = evaluate(model, valid_loader, args.cuda())
+        train_acc = evaluate(model, train_loader, args.cuda)
+        val_acc = evaluate(model, valid_loader, args.cuda)
 
         print('Epoch: {} | Train Loss: {:.4f} | Train Accuracy: {:.4f} | Val Accuracy: {:.4f}'.format(
             epoch, total_cost, train_acc, val_acc))
