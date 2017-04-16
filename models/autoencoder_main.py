@@ -425,9 +425,9 @@ def main():
                         p.data.add_(-args.lr, p.grad.data)
 
                 total_cost += loss.data[0]
-                recent_rloss = 0.95 * recent_rloss + 0.05 * rloss.data[0]
-                recent_dloss = 0.95 * recent_dloss + 0.05 * dloss.data[0]
-                recent_sloss = 0.95 * recent_sloss + 0.05 * sloss.data[0]
+                recent_rloss = 0.9 * recent_rloss + 0.1 * rloss.data[0]
+                recent_dloss = 0.9 * recent_dloss + 0.1 * dloss.data[0]
+                recent_sloss = 0.9 * recent_sloss + 0.1 * sloss.data[0]
                 recent_sep = 0.9 * recent_sep + 0.1 * separation.data[0]
 
                 #if ind > 100:
