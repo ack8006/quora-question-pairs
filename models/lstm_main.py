@@ -174,6 +174,7 @@ def main():
     print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | EncoderGrad | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize')
     print(model_config)
 
+    best_val_acc = 0.78
     for epoch in range(args.epochs):
         model.train()
         total_cost = 0
@@ -212,6 +213,12 @@ def main():
         model.eval()
         train_acc = evaluate(model, train_loader, args.cuda())
         val_acc = evaluate(model, valid_loader, args.cuda())
+        if args.save and (val_acc > best_val_acc):
+            torch.save(model, args.save)
+            torch.save(model.state_dict(), args.save + ".state_dict")
+            with open(args.save + ".state_dict.config", "w") as f:
+                f.write(model_config)
+
 
         print('Epoch: {} | Train Loss: {:.4f} | Train Accuracy: {:.4f} | Val Accuracy: {:.4f}'.format(
             epoch, total_cost, train_acc, val_acc))
