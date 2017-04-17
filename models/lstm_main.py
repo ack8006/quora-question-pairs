@@ -211,8 +211,9 @@ def main():
                 cur_loss = 0
 
         model.eval()
-        train_acc = evaluate(model, train_loader, args.cuda())
-        val_acc = evaluate(model, valid_loader, args.cuda())
+
+        train_acc = evaluate(model, train_loader, args.cuda)
+        val_acc = evaluate(model, valid_loader, args.cuda)
         if args.save and (val_acc > best_val_acc):
             torch.save(model, args.save)
             torch.save(model.state_dict(), args.save + ".state_dict")
