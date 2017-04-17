@@ -219,6 +219,7 @@ def main():
             torch.save(model.state_dict(), args.save + ".state_dict")
             with open(args.save + ".state_dict.config", "w") as f:
                 f.write(model_config)
+            best_val_acc = val_acc
 
 
         print('Epoch: {} | Train Loss: {:.4f} | Train Accuracy: {:.4f} | Val Accuracy: {:.4f}'.format(
