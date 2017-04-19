@@ -220,11 +220,13 @@ def main():
         if args.save and (val_acc > best_val_acc):
             with open(args.save + '_corpus.pkl', 'wb') as corp_f:
                 pkl.dump(corpus, corp_f, protocol=pkl.HIGHEST_PROTOCOL)
-            torch.save(model, args.save)
-            torch.save(model.state_dict(), args.save + ".state_dict")
+            torch.save(model.cpu(), args.save)
+            torch.save(model.cpu().state_dict(), args.save + ".state_dict")
             with open(args.save + ".state_dict.config", "w") as f:
                 f.write(model_config)
             best_val_acc = val_acc
+            if args.cuda:
+                model.cuda()
 
 
         print('Epoch: {} | Train Loss: {:.4f} | Train Accuracy: {:.4f} | Val Accuracy: {:.4f}'.format(
