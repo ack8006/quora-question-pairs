@@ -3,6 +3,7 @@ sys.path.append('../utils/')
 
 import argparse
 import time
+import pickle as pkl
 
 import numpy as np
 import pandas as pd
@@ -215,6 +216,8 @@ def main():
         train_acc = evaluate(model, train_loader, args.cuda)
         val_acc = evaluate(model, valid_loader, args.cuda)
         if args.save and (val_acc > best_val_acc):
+            with open(args.save + '_corpus.pkl', 'wb') as corp_f:
+                pkl.dump(corpus, corp_f, protocol=pkl.HIGHEST_PROTOCOL)
             torch.save(model, args.save)
             torch.save(model.state_dict(), args.save + ".state_dict")
             with open(args.save + ".state_dict.config", "w") as f:
