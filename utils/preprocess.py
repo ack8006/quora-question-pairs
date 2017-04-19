@@ -10,11 +10,11 @@ from data import TacoText
 
 
 def load_data(data_path, corpus, d_in, train_split=0.90):
-	'''
-	Arguments:
-	data_path - String - takes file path the train data dataframe
-	d_in - INT - 
-	'''
+    '''
+    Arguments:
+    data_path - String - takes file path the train data dataframe
+    d_in - INT - 
+    '''
     print('Loading Data')
     train_data = pd.read_csv(data_path)
     val_data = train_data.iloc[int(len(train_data) * train_split):]
