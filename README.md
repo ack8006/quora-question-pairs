@@ -6,6 +6,7 @@ TODO (ALEX):
 - Experiment with word adjustments (numbers -> N, removing stop_words, UNK heuristics, word roots)
 - Remove all words in common
 
+- Add Batchnorm
 - LSTM multilayer MLP
 - LSTMs with: cosine similarity, "angle", "distance"
 - LSTM with hand crafted features concatenated on top

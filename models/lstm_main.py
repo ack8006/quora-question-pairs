@@ -1,12 +1,11 @@
 import sys
-sys.path.append('../utils/')
 
 import argparse
 import time
 import pickle as pkl
 
-import numpy as np
-import pandas as pd
+# import numpy as np
+# import pandas as pd
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -14,51 +13,53 @@ from torch.nn.utils import clip_grad_norm
 from torch.utils.data import TensorDataset, DataLoader
 from data import TacoText
 
-import nltk
-nltk.download('punkt')
-from nltk.tokenize import word_tokenize
+# import nltk
+# nltk.download('punkt')
+# from nltk.tokenize import word_tokenize
 
+sys.path.append('../utils/')
 from models import LSTMModel
+from preprocess import load_data
 
 
 
-def load_data(data_path, d_in, vocab_size, train_split = 0.90):
-    print('Loading Data')
-    train_data = pd.read_csv(data_path)
-    val_data = train_data.iloc[int(len(train_data)*train_split):]
-    train_data = train_data.iloc[:int(len(train_data)*train_split)]
-    # val_data = train_data.iloc[1000:1100]
-    # train_data = train_data.iloc[:1000]
+# def load_data(data_path, d_in, vocab_size, train_split = 0.90):
+#     print('Loading Data')
+#     train_data = pd.read_csv(data_path)
+#     val_data = train_data.iloc[int(len(train_data)*train_split):]
+#     train_data = train_data.iloc[:int(len(train_data)*train_split)]
+#     # val_data = train_data.iloc[1000:1100]
+#     # train_data = train_data.iloc[:1000]
 
-    print('Cleaning and Tokenizing')
-    q1, q2, y = clean_and_tokenize(train_data)
-    q1_val, q2_val, y_val = clean_and_tokenize(val_data)
+#     print('Cleaning and Tokenizing')
+#     q1, q2, y = clean_and_tokenize(train_data)
+#     q1_val, q2_val, y_val = clean_and_tokenize(val_data)
 
-    corpus = TacoText(vocab_size, lower=True)
-    corpus.gen_vocab(q1+q2+q2_val+q1_val)
+#     corpus = TacoText(vocab_size, lower=True)
+#     corpus.gen_vocab(q1+q2+q2_val+q1_val)
 
-    print('Padding and Shaping')
-    X, y = pad_and_shape(corpus, q1, q2, y, len(train_data), d_in)
-    X_val, y_val = pad_and_shape(corpus, q1_val, q2_val, y_val, len(val_data), d_in)
+#     print('Padding and Shaping')
+#     X, y = pad_and_shape(corpus, q1, q2, y, len(train_data), d_in)
+#     X_val, y_val = pad_and_shape(corpus, q1_val, q2_val, y_val, len(val_data), d_in)
 
-    return X, y, X_val, y_val, corpus
-
-
-def clean_and_tokenize(data):
-    q1 = list(data['question1'].map(str))
-    q2 = list(data['question2'].map(str))
-    y = list(data['is_duplicate'])
-    q1 = [word_tokenize(x) for x in q1]
-    q2 = [word_tokenize(x) for x in q2]
-    return q1, q2, y
+#     return X, y, X_val, y_val, corpus
 
 
-def pad_and_shape(corpus, q1, q2, y, num_samples, d_in):
-    X = torch.Tensor(num_samples, 1, 2, d_in).long()
-    X[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1, d_in)).long()
-    X[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2, d_in)).long()
-    y = torch.from_numpy(np.array(y)).long()
-    return X, y
+# def clean_and_tokenize(data):
+#     q1 = list(data['question1'].map(str))
+#     q2 = list(data['question2'].map(str))
+#     y = list(data['is_duplicate'])
+#     q1 = [word_tokenize(x) for x in q1]
+#     q2 = [word_tokenize(x) for x in q2]
+#     return q1, q2, y
+
+
+# def pad_and_shape(corpus, q1, q2, y, num_samples, d_in):
+#     X = torch.Tensor(num_samples, 1, 2, d_in).long()
+#     X[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1, d_in)).long()
+#     X[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2, d_in)).long()
+#     y = torch.from_numpy(np.array(y)).long()
+#     return X, y
 
 
 def get_glove_embeddings(file_path, corpus, ntoken, nemb):
@@ -137,7 +138,8 @@ def main():
     args = parser.parse_args()
 
 
-    X, y, X_val, y_val, corpus = load_data(args.data, args.din, args.vocabsize, train_split=0.9)
+    corpus = TacoText(args.vocabsize, lower=True)
+    X, y, X_val, y_val = load_data(args.data, corpus, args.din, train_split=0.9)
 
     if args.cuda:
         X, y = X.cuda(), y.cuda()
@@ -185,8 +187,8 @@ def main():
             model.zero_grad()
             pred = model(qs[:, 0, 0, :], qs[:, 0, 1, :])
             if args.cuda:
-            	pred = pred.cuda()
-            	duplicate = duplicate.cuda()
+                pred = pred.cuda()
+                duplicate = duplicate.cuda()
             duplicate = Variable(duplicate)
             loss = criterion(pred, duplicate)
             loss.backward()

@@ -32,11 +32,13 @@ class TacoText(object):
     def pipeline(self, x):
         if self.lower:
             x = x.lower()
-        return x
+        return [x]
 
     def gen_vocab(self, data):
         #Flattens List of List
-        word_counts = Counter([self.pipeline(w) for s in data for w in s])
+        word_counts = Counter(x for y in [self.vocab_pipe(w) for s in data for w in s] for x in y)
+        if None in word_counts:
+            del word_counts[None]
         #print('Total Words: ', len(word_counts))
         if self.vocab_size:
             word_counts = dict(word_counts.most_common(self.vocab_size))
