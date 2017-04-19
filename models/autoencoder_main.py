@@ -40,8 +40,19 @@ nlp = spacy.load('en', parser=False)
 # cuda = False
 # log_interval = 200
 
+def logistic(slope, shift, x):
+    gate0 = slope * (x - shift)
+    return 1.0 / (1.0 + math.exp(-gate0))
+
+def scheduler(config):
+    '''Creates a "sigmoid scheduler", a sequence of values that follow a
+    scaled and shifted sigmoid function.'''
+    slope, shift = config
+    return (logistic(slope, shift, x) for x in itertools.count())
+
 
 def load_data(args, path, glove, limit=1000000):
+    '''Load a csv file containing (qid, question) rows'''
     print('Loading Data')
     data = pd.read_csv(path, encoding='utf-8')
     data.columns = ['qid', 'question']
@@ -98,10 +109,14 @@ def generate_supplement(args, questions):
     while True:
         np.random.shuffle(indices)
         for batch in xrange(0, len(indices), args.batchsize): # Seed size
+            if len(indices) - batch != args.batchsize:
+                # Skip to keep batch size constant; indices will get shuffled
+                # anyway.
+                continue
             batch_indices = indices[batch:(batch + args.batchsize)]
             yield cd(questions[torch.LongTensor(batch_indices)])
 def cache(x, batchsize=250):
-    cache = []
+    cache = [] # Batch of batches.
     for item in x:
         if len(cache) == batchsize:
             for c in cache:
@@ -353,10 +368,6 @@ def main():
     optimizer = torch.optim.Adam(
             [param for param in model.parameters()
                 if param.requires_grad], lr=args.lr, weight_decay=args.weight_decay)
-
-    def logistic(slope, shift, x):
-        gate0 = slope * (x - shift)
-        return 1.0 / (1.0 + math.exp(-gate0))
 
     # Input: B x W LongTensor
     # Duplicate_matrix: B x B ByteTensor
