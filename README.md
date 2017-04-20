@@ -29,6 +29,7 @@ Hand Crafted Features:
 - number of common words
 - cosine similarity of avrage of word2vex embeddings
 - pos tags
+- Start with same quesiton word
 
 
 Evaluation:
