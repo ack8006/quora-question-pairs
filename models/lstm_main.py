@@ -11,14 +11,14 @@ import torch.nn as nn
 from torch.autograd import Variable
 from torch.nn.utils import clip_grad_norm
 from torch.utils.data import TensorDataset, DataLoader
-from data import TacoText
 
 # import nltk
 # nltk.download('punkt')
 # from nltk.tokenize import word_tokenize
 
-sys.path.append('../utils/')
 from models import LSTMModel
+sys.path.append('../utils/')
+from data import TacoText
 from preprocess import load_data
 
 
