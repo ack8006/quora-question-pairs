@@ -3,6 +3,7 @@ import sys
 import argparse
 import time
 import pickle as pkl
+import functools
 
 # import numpy as np
 # import pandas as pd
@@ -20,46 +21,7 @@ from models import LSTMModel
 sys.path.append('../utils/')
 from data import TacoText
 from preprocess import load_data
-
-
-
-# def load_data(data_path, d_in, vocab_size, train_split = 0.90):
-#     print('Loading Data')
-#     train_data = pd.read_csv(data_path)
-#     val_data = train_data.iloc[int(len(train_data)*train_split):]
-#     train_data = train_data.iloc[:int(len(train_data)*train_split)]
-#     # val_data = train_data.iloc[1000:1100]
-#     # train_data = train_data.iloc[:1000]
-
-#     print('Cleaning and Tokenizing')
-#     q1, q2, y = clean_and_tokenize(train_data)
-#     q1_val, q2_val, y_val = clean_and_tokenize(val_data)
-
-#     corpus = TacoText(vocab_size, lower=True)
-#     corpus.gen_vocab(q1+q2+q2_val+q1_val)
-
-#     print('Padding and Shaping')
-#     X, y = pad_and_shape(corpus, q1, q2, y, len(train_data), d_in)
-#     X_val, y_val = pad_and_shape(corpus, q1_val, q2_val, y_val, len(val_data), d_in)
-
-#     return X, y, X_val, y_val, corpus
-
-
-# def clean_and_tokenize(data):
-#     q1 = list(data['question1'].map(str))
-#     q2 = list(data['question2'].map(str))
-#     y = list(data['is_duplicate'])
-#     q1 = [word_tokenize(x) for x in q1]
-#     q2 = [word_tokenize(x) for x in q2]
-#     return q1, q2, y
-
-
-# def pad_and_shape(corpus, q1, q2, y, num_samples, d_in):
-#     X = torch.Tensor(num_samples, 1, 2, d_in).long()
-#     X[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1, d_in)).long()
-#     X[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2, d_in)).long()
-#     y = torch.from_numpy(np.array(y)).long()
-#     return X, y
+from pipeline import pipeline
 
 
 def get_glove_embeddings(file_path, corpus, ntoken, nemb):
@@ -70,8 +32,8 @@ def get_glove_embeddings(file_path, corpus, ntoken, nemb):
         split_line = line.split()
         word = split_line[0]
         if word in corpus:
+            print(word)
             embedding = torch.Tensor([float(val) for val in split_line[1:]])
-            # embeddings[corpus.dictionary.word2idx[word]] = embedding
             embeddings[corpus[word]] = embedding
     return embeddings
 
@@ -127,6 +89,12 @@ def main():
                         help='random seed')
     parser.add_argument('--optimizer', action='store_true',
                         help='use ADAM optimizer')
+    parser.add_argument('--pipeline', action='store_true',
+                        help='use pipeline file')
+    parser.add_argument('--psw', type=int, default=1)
+    parser.add_argument('--ppunc', action='store_true')
+    parser.add_argument('--pntok', action='store_true')
+    parser.add_argument('--pkq', action='store_true')
     parser.add_argument('--freezeemb', action='store_false',
                         help='freezes embeddings')
     parser.add_argument('--cuda', action='store_true',
@@ -137,8 +105,16 @@ def main():
                         help='path to save the final model')
     args = parser.parse_args()
 
+    pipe = None
+    if args.pipeline:
+        pipe = functools.partial(pipeline, 
+                                rm_stop_words=args.psw, 
+                                rm_punc=args.ppunc, 
+                                number_token=args.pntok, 
+                                keep_questions=args.pkq)
 
-    corpus = TacoText(args.vocabsize, lower=True)
+    corpus = TacoText(args.vocabsize, lower=True, vocab_pipe=pipe)
+
     X, y, X_val, y_val = load_data(args.data, corpus, args.din, train_split=0.9)
 
     if args.cuda:
@@ -172,9 +148,10 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, 
-                        args.embinit, args.freezeemb, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize)])
+                        args.embinit, args.freezeemb, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize,
+                        args.pipeline, args.psw, args.ppunc, args.pntok, args.pkq)])
 
-    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | EncoderGrad | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize')
+    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | EncoderGrad | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize | pipeline | stop | punc | ntoken | keep_ques')
     print(model_config)
 
     best_val_acc = 0.78

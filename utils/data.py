@@ -1,4 +1,6 @@
 from collections import Counter, defaultdict
+from itertools import chain
+
 import numpy as np
 
 class Dictionary(object):
@@ -34,9 +36,12 @@ class TacoText(object):
             x = x.lower()
         return [x]
 
+    def pipe_data(self, data):
+        return [list(chain.from_iterable(x)) for x in [[self.vocab_pipe(w) for w in s] for s in data]]
+
     def gen_vocab(self, data):
         #Flattens List of List
-        word_counts = Counter(x for y in [self.vocab_pipe(w) for s in data for w in s] for x in y)
+        word_counts = Counter(x for y in [w for s in data for w in s] for x in y)
         if None in word_counts:
             del word_counts[None]
         #print('Total Words: ', len(word_counts))

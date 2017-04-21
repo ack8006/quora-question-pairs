@@ -5,8 +5,6 @@ import nltk
 nltk.download('punkt')
 from nltk.tokenize import word_tokenize
 
-from data import TacoText
-
 
 
 def load_data(data_path, corpus, d_in, train_split=0.90):
@@ -17,6 +15,8 @@ def load_data(data_path, corpus, d_in, train_split=0.90):
     '''
     print('Loading Data')
     train_data = pd.read_csv(data_path)
+    #Shuffle order of training data
+    train_data = train_data.reindex(np.random.permutation(train_data.index))
     val_data = train_data.iloc[int(len(train_data) * train_split):]
     train_data = train_data.iloc[:int(len(train_data) * train_split)]
 
@@ -24,7 +24,6 @@ def load_data(data_path, corpus, d_in, train_split=0.90):
     q1, q2, y = clean_and_tokenize(train_data)
     q1_val, q2_val, y_val = clean_and_tokenize(val_data)
 
-    # corpus = TacoText(vocab_size, lower=True)
     corpus.gen_vocab(q1 + q2 + q2_val + q1_val)
 
     print('Padding and Shaping')
@@ -34,12 +33,19 @@ def load_data(data_path, corpus, d_in, train_split=0.90):
     return X, y, X_val, y_val
 
 
-def clean_and_tokenize(data):
+def clean_and_tokenize(data, corpus):
     q1 = list(data['question1'].map(str))
     q2 = list(data['question2'].map(str))
     y = list(data['is_duplicate'])
     q1 = [word_tokenize(x) for x in q1]
     q2 = [word_tokenize(x) for x in q2]
+
+    print('Piping Data')
+    print(q1[:5])
+    q1 = corpus.pipe_data(q1)
+    print(q1[:5])
+    q2 = corpus.pipe_data(q2)
+
     return q1, q2, y
 
 
