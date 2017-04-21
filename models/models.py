@@ -170,7 +170,7 @@ class LSTMModel(nn.Module):
 class LSTMModelMLP(nn.Module):
     def __init__(self, d_in, d_hid, n_layers, d_out, d_emb, vocab, dropout,
                     emb_init, hid_init, dec_init, glove_emb, freeze_emb, is_cuda):
-        super(LSTMModel, self).__init__()
+        super(LSTMModelMLP, self).__init__()
 
         self.d_hid = d_hid
         self.n_layers = n_layers
@@ -224,6 +224,7 @@ class LSTMModelMLP(nn.Module):
 
         #Concatenates Hidden State Directions and Layers
         hid1 = torch.cat(torch.chunk(hid1, hid1.size()[0]), 2)[0]
+        print(hid1.size())
         hid2 = torch.cat(torch.chunk(hid2, hid2.size()[0]), 2)[0]
 
         #Concatenates Question Hidden States Together
