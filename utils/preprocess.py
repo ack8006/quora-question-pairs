@@ -21,8 +21,8 @@ def load_data(data_path, corpus, d_in, train_split=0.90):
     train_data = train_data.iloc[:int(len(train_data) * train_split)]
 
     print('Cleaning and Tokenizing')
-    q1, q2, y = clean_and_tokenize(train_data)
-    q1_val, q2_val, y_val = clean_and_tokenize(val_data)
+    q1, q2, y = clean_and_tokenize(train_data, corpus)
+    q1_val, q2_val, y_val = clean_and_tokenize(val_data, corpus)
 
     corpus.gen_vocab(q1 + q2 + q2_val + q1_val)
 
