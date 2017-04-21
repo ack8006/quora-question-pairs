@@ -7,6 +7,7 @@ import itertools
 import time
 import math
 import data
+from autoencoder_data import Data
 import pickle
 
 import numpy as np
@@ -127,7 +128,7 @@ def noise(args):
 
 def main():
     parser = argparse.ArgumentParser(description='PyTorch Quora RNN/LSTM Language Model')
-    parser.add_argument('--data', type=str, default='../data/all_questions.csv',
+    parser.add_argument('--datadir', type=str, default='../data',
                         help='location of the data corpus')
     parser.add_argument('--supplement', type=str, default=None,
                         help='unlabeled supplemental data')

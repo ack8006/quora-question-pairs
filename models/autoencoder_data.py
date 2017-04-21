@@ -4,6 +4,7 @@ import pandas as pd
 import os
 import spacy
 import json
+import data
 
 nlp = spacy.load('en', parser=False)
 
@@ -52,7 +53,7 @@ class LoadedGlove:
 class Data:
     '''Dataset to load, and the dictionary used to read them.'''
     def __init__(self, args):
-        f = lambda fname: os.path.join(args.datadir, f)
+        f = lambda fname: os.path.join(args.datadir, fname)
 
         print('loading Glove')
         assert args.demb in (50, 100, 200, 300)
