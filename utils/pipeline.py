@@ -109,6 +109,7 @@ def unit_tests():
     assert pipeline("When's", rm_stop_words=1, keep_questions=True, rm_punc=True) == ['when']
     assert pipeline("When's", rm_stop_words=1, keep_questions=False, rm_punc=True) == []
     assert pipeline("When's", rm_stop_words=-1, keep_questions=True, rm_punc=True) == ['when', '<**stop**>']
+    assert pipeline('"Was"', keep_questions=True, rm_punc=True) == ['was']
 
     print('All Unit Tests Passed')
 
