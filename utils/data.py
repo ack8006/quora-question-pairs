@@ -41,7 +41,9 @@ class TacoText(object):
 
     def gen_vocab(self, data):
         #Flattens List of List
-        word_counts = Counter(x for y in [w for s in data for w in s] for x in y)
+        word_counts = Counter([w for s in data for w in s])
+        #LETTER
+        # letter_counts = Counter(x for y in [w for s in data for w in s] for x in y)
         if None in word_counts:
             del word_counts[None]
         #print('Total Words: ', len(word_counts))

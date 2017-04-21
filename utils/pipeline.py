@@ -20,7 +20,7 @@ def pipeline(text, rm_stop_words=0, rm_punc=False, number_token=False,
     rm_stop_words: INT: 1-Remove, 0-Nothing, -1-token
     rm_punc: BOOL True - remove all punctuation
     number_token: BOOL: True replace numbers with token, False-Nothing
-    keep_questions: BOOL: True-do not remove question words 5Ws, how, which
+    keep_questions: BOOL: True-do not remove question words 5Ws, how, which, can
     stem: stemmer object: SnowballStemmer('english') object
     lemma: BOOL: True- WordNetLemmatizer() object
         CANNOT BE STEM AND LEMMA
@@ -68,7 +68,7 @@ def pipeline(text, rm_stop_words=0, rm_punc=False, number_token=False,
 
     stop_words = stopwords.words('english')
     if keep_questions:
-        for q_word in ('who', 'what', 'when', 'where', 'why', 'how', 'which'):
+        for q_word in ('who', 'what', 'when', 'where', 'why', 'how', 'which', 'can'):
             stop_words.remove(q_word)
 
     if number_token:
