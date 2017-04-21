@@ -23,23 +23,6 @@ from models import BiLSTM, EmbeddingAutoencoder
 
 nlp = spacy.load('en', parser=False)
 
-# data_path = '../data/train.csv'
-# d_in = 30
-# d_emb = 50
-# cuda = False
-# batch_size = 20
-# epochs = 20
-# d_out = 2
-# d_hid = 50
-# n_layers = 1
-# optimizer = True
-# lr = 0.05
-# dropout = 0.0
-# clip = 0.25
-# vocab_size = 20000
-# cuda = False
-# log_interval = 200
-
 def logistic(slope, shift, x):
     gate0 = slope * (x - shift)
     return 1.0 / (1.0 + math.exp(-gate0))
@@ -50,57 +33,6 @@ def scheduler(config):
     slope, shift = config
     return (logistic(slope, shift, x) for x in itertools.count())
 
-
-def load_data(args, path, glove, limit=1000000):
-    '''Load a csv file containing (qid, question) rows'''
-    print('Loading Data')
-    data = pd.read_csv(path, encoding='utf-8')
-    data.columns = ['qid', 'question']
-
-    train_data = data.iloc[:int(len(data)*0.8)]
-
-    print('Cleaning and Tokenizing')
-    qid, q = clean_and_tokenize(args, train_data, glove.dictionary, limit)
-
-    return qid, q
-
-def clean_and_tokenize(args, train_data, dictionary, limit):
-    def to_indices(words):
-        ql = [dictionary.get(str(w).lower(), dictionary['<unk>']) for w in words]
-        qv = np.ones(args.din, dtype=int) * dictionary['<pad>'] # all padding
-        qv[:len(ql)] = ql[:args.din] # set values
-        return qv
-
-    qids = []
-    qs = []
-    processed = 0
-    print('Reading max:', limit)
-    for example in train_data.itertuples():
-        if processed % 10000 == 0:
-            print('processed {0}'.format(processed))
-        if processed > limit:
-            break
-        tokens = nlp(example.question, parse=False)
-        qids.append(example.qid)
-        qs.append(to_indices(tokens))
-        processed += 1
-    qst = torch.LongTensor(np.stack(qs, axis=0))
-    qidst = torch.LongTensor(qids)
-    return qidst, qst
-
-class LoadedGlove:
-    def __init__(self, glove):
-        self.dictionary = glove[0]
-        self.lookup = glove[1]
-        self.module = glove[2]
-
-def load_glove(args):
-    # Returns dictionary, lookup, embed
-    print('loading Glove')
-    glove = data.load_embeddings(
-            '{1}/glove.6B.{0}d.txt'.format(args.demb, args.glovedata),
-            max_words=args.vocabsize)
-    return LoadedGlove(glove)
 
 def generate_supplement(args, questions):
     indices = range(len(questions))
@@ -115,6 +47,7 @@ def generate_supplement(args, questions):
                 continue
             batch_indices = indices[batch:(batch + args.batchsize)]
             yield cd(questions[torch.LongTensor(batch_indices)])
+
 def cache(x, batchsize=250):
     cache = [] # Batch of batches.
     for item in x:
