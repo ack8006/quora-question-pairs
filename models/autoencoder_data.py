@@ -49,25 +49,26 @@ class LoadedGlove:
         self.lookup = glove[1]
         self.module = glove[2]
 
-def load_glove(args):
-    # Returns dictionary, lookup, embed
-    print('loading Glove')
-    glove = data.load_embeddings(
-            '{1}/glove.6B.{0}d.txt'.format(args.demb, args.glovedata),
-            max_words=args.vocabsize)
-    return LoadedGlove(glove)
-
 class Data:
     '''Dataset to load, and the dictionary used to read them.'''
     def __init__(self, args):
         f = lambda fname: os.path.join(args.datadir, f)
 
-        self.glove = load_glove(args)
+        print('loading Glove')
+        assert args.demb in (50, 100, 200, 300)
+        self.glove = LoadedGlove(data.load_embeddings(
+                f('glove.6B.{0}d.txt'.format(args.demb)),
+                max_words=args.vocabsize))
+
         self.qid_train, self.questions_train = \
                 load_data(args, f('questions_train.csv'))
         self.qid_valid, self.questions_valid = \
                 load_data(args, f('questions_valid.csv'))
-        self.train_clusters = json.load(open(f('train_clusters.json')))
-        self.valid_clusters = json.load(open(f('valid_clusters.json')))
+        if args.supplement is not None:
+            self.qid_supplement, self.questions_supplement = \
+                    load_data(args, f('questions_supplement.csv'))
+        else:
+            self.qid_supplement, self.questions_supplement = None, None
+
 
 

@@ -8,7 +8,6 @@ import time
 import math
 import data
 import pickle
-import spacy
 
 import numpy as np
 import pandas as pd
@@ -21,8 +20,6 @@ from torch.utils.data import TensorDataset, DataLoader
 
 from models import BiLSTM, EmbeddingAutoencoder
 
-nlp = spacy.load('en', parser=False)
-
 def logistic(slope, shift, x):
     gate0 = slope * (x - shift)
     return 1.0 / (1.0 + math.exp(-gate0))
@@ -32,7 +29,6 @@ def scheduler(config):
     scaled and shifted sigmoid function.'''
     slope, shift = config
     return (logistic(slope, shift, x) for x in itertools.count())
-
 
 def generate_supplement(args, questions):
     indices = range(len(questions))
@@ -60,89 +56,13 @@ def cache(x, batchsize=250):
         yield c
 
 
-def generate(args, qids, questions):
-    print(qids[:6])
-    print(questions[:6])
-    duplicates = pd.read_csv(args.duplicates)
-    duplicates.columns = ['qid1', 'qid2']
-
-    # What duplicates are available.
-    all_qids = list(qids)
-    set_qids = set(qids)
-    duplist = ((t.qid1, t.qid2) for t in duplicates.itertuples())
-    duplist = filter(lambda (q1, q2): q1 in set_qids and q2 in set_qids, duplist)
-    print('{0} possible dupes'.format(len(duplist)))
-
-    # Is (q1, q2) a duplicate.
-    dupset = set(duplist)
-    # For q1, what are its duplicates.
-    dup_lookup = {qid: [] for qid in all_qids}
-    idx_lookup = {qid: i for i, qid in enumerate(all_qids)}
-    for qid1, qid2 in duplist:
-            dup_lookup[qid1].append(qid2)
-
-    print('Generating seeds...')
-    seeds = []
-    seeds_seen = {}
-    for qid, dups in dup_lookup.items():
-        if len(dups) == 0:
-            continue
-        if qid in seeds_seen:
-            continue
-        seeds_seen[qid] = True
-        for d in dups:
-            seeds_seen[d] = True
-        seeds.append((qid, dups))
-    print('Seeds:', len(seeds))
-
+def generate(args, data, clusters_list):
     def batch():
-        np.random.shuffle(seeds)
-        np.random.shuffle(all_qids)
-        seed_size = args.seed_size
-        qids_iter = itertools.cycle(all_qids)
-        for dup_batch in xrange(0, len(seeds), seed_size): # Seed size
+        for batch_qs, mtx in clusters.iterate_epoch(clusters_list, args):
             if args.batches > 0 and dup_batch / seed_size > args.batches:
                 return
-            # Get a selection of duplicates as the seed.
-            seed_ids = []
-            seed_id_pairs = []
-            already = {}
-            for qid1, selection in seeds[dup_batch:(dup_batch + seed_size)]:
-                qid2 = np.random.choice(selection)
-                seed_ids.append(qid1)
-                seed_id_pairs.append(qid2)
-                already[qid1] = True
-                already[qid2] = True
-            # From the seeds, find other ids that are duplicates.
-            extra = []
-            for qid in seed_ids:
-                dups = dup_lookup[qid]
-                np.random.shuffle(dups)
-                for d in dups:
-                    if d not in already:
-                        already[d] = True
-                        extra.append(d)
-
-            np.random.shuffle(extra)
-            batch = seed_ids + seed_id_pairs + extra[:(
-                args.batchsize - len(seed_ids) * 2)]
-            while len(batch) < args.batchsize:
-                qid = next(qids_iter)
-                if qid not in already:
-                    already[qid] = True
-                    batch.append(qid)
-            np.random.shuffle(batch)
-
-            mtx = np.zeros((len(batch), len(batch)), dtype=np.int32)
-            for i, q1 in enumerate(batch):
-                for j, q2 in enumerate(batch):
-                    mtx[i,j] = (q1, q2) in dupset
-            #print(mtx.sum(axis=1))
 
             # Yield input, duplicate matrix
-            indices = [idx_lookup[qid] for qid in batch]
-            mtx = torch.from_numpy(mtx)
-            batch_qs = questions[torch.LongTensor(indices)]
             if args.cuda:
                 batch_qs = batch_qs.cuda()
                 mtx = mtx.cuda()
@@ -211,10 +131,6 @@ def main():
                         help='location of the data corpus')
     parser.add_argument('--supplement', type=str, default=None,
                         help='unlabeled supplemental data')
-    parser.add_argument('--duplicates', type=str, default='../data/unique_duplicates.csv',
-                        help='location of the data corpus')
-    parser.add_argument('--glovedata', type=str, default='../data/',
-                        help='location of the pretrained glove embeddings')
     parser.add_argument('--max_sentences', type=int, default=1000000,
                         help='max num of sentences to train on')
     parser.add_argument('--max_supplement', type=int, default=1000000,
@@ -277,9 +193,7 @@ def main():
                         help='path to save the final model')
     args = parser.parse_args()
 
-    assert args.demb in (50, 100, 200, 300)
-    glove = load_glove(args)
-    qid, questions = load_data(args, args.data, glove, args.max_sentences)
+    data = Data(args)
     train_loader = generate(args, qid, questions)
 
     supplement_loader = None
