@@ -32,7 +32,6 @@ def get_glove_embeddings(file_path, corpus, ntoken, nemb):
         split_line = line.split()
         word = split_line[0]
         if word in corpus:
-            print(word)
             embedding = torch.Tensor([float(val) for val in split_line[1:]])
             embeddings[corpus[word]] = embedding
     return embeddings
