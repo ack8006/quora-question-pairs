@@ -5,8 +5,8 @@ from nltk.corpus import stopwords
 # from nltk.stem import SnowballStemmer
 # from nltk.stem.wordnet import WordNetLemmatizer
 
-# import nltk
-# nltk.download('stopwords')
+import nltk
+nltk.download('stopwords')
 # nltk.download('snowball_data')
 # nltk.download('wordnet')
 
