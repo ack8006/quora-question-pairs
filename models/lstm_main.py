@@ -91,10 +91,14 @@ def main():
                         help='use ADAM optimizer')
     parser.add_argument('--pipeline', action='store_true',
                         help='use pipeline file')
-    parser.add_argument('--psw', type=int, default=1)
-    parser.add_argument('--ppunc', action='store_true')
-    parser.add_argument('--pntok', action='store_true')
-    parser.add_argument('--pkq', action='store_true')
+    parser.add_argument('--psw', type=int, default=1,
+                        help='remove stop words')
+    parser.add_argument('--ppunc', action='store_true',
+                        help='remove punctuation')
+    parser.add_argument('--pntok', action='store_true',
+                        help='use number tokens')
+    parser.add_argument('--pkq', action='store_true',
+                        help='keep question words')
     parser.add_argument('--freezeemb', action='store_false',
                         help='freezes embeddings')
     parser.add_argument('--cuda', action='store_true',
