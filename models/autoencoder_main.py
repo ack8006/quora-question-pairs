@@ -197,26 +197,6 @@ def distance_loss(log_prob, duplicate_matrix):
     # Gap loss between lest likely duplicate and most likely non-duplicate.
     return (1 + max_non - min_dup).mean(), (max_dup - max_non).mean()
 
-def measure(log_prob, duplicate_matrix):
-    '''Measures the accuracy of separating duplicates from non-duplicates'''
-    has_dup = duplicate_matrix.sum(dim=1).gt(0)
-    log_prob = log_prob[has_dup].transpose(0, 1)[has_dup].transpose(0, 1)
-    duplicate_matrix = duplicate_matrix[has_dup].transpose(0, 1)[has_dup].transpose(0, 1)
-    prob, duplicate_matrix, non_duplicate_matrix = \
-        normalize(log_prob, duplicate_matrix)
-
-    predict_duplicate = prob > 0.5
-    predict_non_duplicate = prob < 0.5
-
-    true_positive = predict_duplicate * duplicate_matrix 
-    false_positive = predict_duplicate * non_duplicate_matrix 
-    true_negative = predict_non_duplicate * non_duplicate_matrix 
-    false_negative = predict_non_duplicate * duplicate_matrix 
-
-    return np.array([  # predicted
-        [true_positive, false_negative], # true label
-        [false_positive, true_negative]])
-
 
 def noise(args):
     stdev = args.noise_stdev
@@ -348,9 +328,10 @@ def main():
 
             # Run model on validation set.
             model.eval()
-            cm = np.zeros((2, 2))
-            for ind, (input, duplicate_matrix) in enumerate(cur_batches):
-                if ind > 10:
+            tvdloss = []
+            tvseparation = []
+            for ind, (input, duplicate_matrix) in enumerate(valids):
+                if ind > 50:
                     break
                 input = Variable(input)
 
@@ -359,10 +340,13 @@ def main():
                     input = input.cuda()
                 auto, log_prob, _ = \
                     model(input, noise(args), None)
-                cm += measure(log_prob, Variable(duplicate_matrix))
-            print(cm)
+                vdloss, vseparation =\
+                        distance_loss(log_prob, Variable(duplicate_matrix))
+                tvdloss.append(vdloss)
+                tvseparation.append(vseparation)
 
-            print('Average loss: {:.6f}'.format(total_cost / batchcount))
+            print('Average loss: {:.6f} | Valid dloss: {:.6f} | Valid sep: {:.6f}'
+                    .format(total_cost / batchcount, np.mean(tvdloss), np.mean(tvseparation)))
             print('-' * 110)
             with open(args.save_to, 'wb') as f:
                 torch.save(model, f)
