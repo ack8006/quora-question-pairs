@@ -285,6 +285,7 @@ def main():
         supplement_loader = generate_supplement(args, data)
 
     try:
+        total_batchcount = 0
         for (eid, (batches, valids)) in enumerate(itertools.izip(
                 train_loader, valid_loader)):
             model.train()
@@ -300,6 +301,7 @@ def main():
             batchcount = 0
             for ind, (input, duplicate_matrix) in enumerate(cur_batches):
                 batchcount = ind + 1
+                total_batchcount += 1
                 start_time = time.time()
                 input = Variable(input)
                 model.zero_grad()
@@ -354,10 +356,10 @@ def main():
                     cur_loss = total_cost / (ind * args.batchsize)
                     elapsed = time.time() - start_time
                     # Each 0.1234/0.7356 loss is reconstruction/kl-div
-                    print('Epoch {} | {:5d}/{} Batches | ms/batch {:5.2f} | '
+                    print('Epoch {} | Batch {:5d} | ms/batch {:5.2f} | '
                             'losses r{:.6f}/{:.6f} s{:.6f}/{:.6f} '
                             'd{:.6f} (sep {:.6f})'.format(
-                                eid, ind, args.batches,
+                                eid, total_batchcount,
                                 elapsed * 1000.0 / args.loginterval,
                                 recent_rloss, recent_kl,
                                 recent_sloss, recent_kl_s,

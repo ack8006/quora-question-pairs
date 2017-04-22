@@ -12,7 +12,6 @@ CMD="python autoencoder_main.py \
 	--dropout 0.5 \
 	--nlayers 1 \
 	--squash_size 100 \
-	--noise_stdev 0.015 \
 	--sloss_factor 0.3 \
 	--sloss_slope 0.6 \
 	--sloss_shift 5 \
@@ -21,7 +20,7 @@ CMD="python autoencoder_main.py \
 	--dloss_shift 5 \
 	--kloss_factor 1.0 \
 	--kloss_slope 1 \
-	--loginterval 5 \
+	--loginterval 20 \
 	--kloss_shift 10 \
 	--seed_size 15 \
         --debug \
