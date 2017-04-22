@@ -1,7 +1,7 @@
 #!/bin/bash
 CMD="python autoencoder_main.py \
 	--vocabsize 10000 \
-	--max_sentences 15000  \
+	--max_sentences 45000  \
         --supplement ../data/supplemental.csv \
 	--max_supplement 7000  \
 	--lr 0.001 \
@@ -22,7 +22,7 @@ CMD="python autoencoder_main.py \
 	--kloss_slope 1 \
 	--loginterval 20 \
 	--kloss_shift 10 \
-	--seed_size 15 \
+	--seed_size 20 \
         --debug \
 	--save_to weight_decay_5.pt"
 

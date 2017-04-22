@@ -61,7 +61,8 @@ def iterate_epoch(clusters, args):
         mtx = np.zeros((batch_max, batch_max), dtype=np.int32)
         for i, q1 in enumerate(batch):
             for j, q2 in enumerate(batch):
-                mtx[i,j] = (q1, q2) in dupset
+                if i != j:
+                    mtx[i,j] = (q1, q2) in dupset
 
         # Print the proportion of duplicate pairs in batch.
         if args.debug and idx % 100 == 0:

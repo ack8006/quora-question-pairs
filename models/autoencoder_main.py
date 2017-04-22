@@ -44,13 +44,6 @@ parser.add_argument('--nlayers', type=int, default=1,
 parser.add_argument('--squash_size', type=int, default=40,
                     help='sentence embedding squash size')
 
-parser.add_argument('--lr', type=float, default=0.05,
-                    help='initial learning rate')
-parser.add_argument('--clip', type=float, default=0.25,
-                    help='gradient clipping')
-parser.add_argument('--noise_stdev', type=float, default=1.0,
-                    help='noise distribution standard deviation')
-
 # D-loss (distance loss) tuning parameters
 parser.add_argument('--dloss_factor', type=float, default=1.0,
                     help='distance loss scaling')
@@ -75,12 +68,20 @@ parser.add_argument('--kloss_shift', type=int, default=10,
 parser.add_argument('--kloss_slope', type=float, default=1.0,
                     help='when should kloss gating reach 0.5')
 
+# Training parameters.
+parser.add_argument('--lr', type=float, default=0.05,
+                    help='initial learning rate')
+parser.add_argument('--clip', type=float, default=0.25,
+                    help='gradient clipping')
+parser.add_argument('--dropout', type=float, default=0.5,
+                    help='dropout applied to layers (0 = no dropout)')
+
+# Labeled training sample generation.
 parser.add_argument('--seed_size', type=int, default=10,
                     help='batch generation: how many seed clusters per batch')
 parser.add_argument('--take_clusters', type=int, default=10,
                     help='batch generation: how many seed points per seed clusters')
-parser.add_argument('--dropout', type=float, default=0.5,
-                    help='dropout applied to layers (0 = no dropout)')
+
 parser.add_argument('--more_dropout', action='store_true',
                     help='activate dropout on the embedding layers')
 parser.add_argument('--epochs', type=int, default=2,
@@ -106,7 +107,6 @@ parser.add_argument('--save_to', type=str,  default='autoencoder_3.pt',
 args = parser.parse_args()
 
 def kl_div_with_std_norm(mean, logvar):
-    """KL divergence with standard multivariate normal. Consumes both inputs"""
     return torch.squeeze(torch.sum(logvar.exp() + mean * mean - logvar - 1, 1) / 2)
 
 def logistic(slope, shift, x):
@@ -133,8 +133,6 @@ def cache(x, batchsize=250):
 def generate_labeled(args, qid, clusters_list, questions):
     '''Generates training batches.'''
     rlookup = {qid: i for i, qid in enumerate(qid)}
-    if args.debug:
-        print(rlookup)
     def batch():
         for batch_idx, (batch_qids, mtx) in enumerate(
                 clusters.iterate_epoch(clusters_list, args)):
@@ -225,7 +223,7 @@ def measure(log_prob, duplicate_matrix, dups, nondups):
 
 
 def noise(args):
-    stdev = args.noise_stdev
+    stdev = 1.0
     batch_size = args.batchsize
     cd = lambda x: x if not args.cuda else x.cuda()
     for_size = {}
@@ -274,6 +272,8 @@ def main():
     recent_sep = 0
     add_to_average = lambda r, v: 0.9 * r + 0.1 * v
 
+    fmt = lambda f: '{:.6f}'.format(f)[:8]
+
     train_loader = generate_train(args, data)
     valid_loader = generate_valid(args, data)
     noiser = noise(args)
@@ -301,7 +301,6 @@ def main():
             batchcount = 0
             for ind, (input, duplicate_matrix) in enumerate(cur_batches):
                 batchcount = ind + 1
-                total_batchcount += 1
                 start_time = time.time()
                 input = Variable(input)
                 model.zero_grad()
@@ -328,9 +327,9 @@ def main():
                     kl_s = kl_div_with_std_norm(mean, logvar).mean()
 
                 if args.debug and first_batch:
-                    print(input)
-                    print(duplicate_matrix)
-                    print(log_prob)
+                    print('INPUT:', input)
+                    print('DUPLICATES:', duplicate_matrix)
+                    print('LOGPROB:', log_prob)
                     first_batch = False
 
                 # Assemble the complete loss function.
@@ -357,13 +356,13 @@ def main():
                     elapsed = time.time() - start_time
                     # Each 0.1234/0.7356 loss is reconstruction/kl-div
                     print('Epoch {} | Batch {:5d} | ms/batch {:5.2f} | '
-                            'losses r{:.6f}/{:.6f} s{:.6f}/{:.6f} '
-                            'd{:.6f} (sep {:.6f})'.format(
+                            'losses r{}/{} s{}/{} d{} (sep {})'.format(
                                 eid, total_batchcount,
                                 elapsed * 1000.0 / args.loginterval,
-                                recent_rloss, recent_kl,
-                                recent_sloss, recent_kl_s,
-                                recent_dloss, recent_sep))
+                                fmt(recent_rloss), fmt(recent_kl),
+                                fmt(recent_sloss), fmt(recent_kl_s),
+                                fmt(recent_dloss), fmt(recent_sep)))
+                total_batchcount += 1
 
             # Run model on validation set.
             model.eval()
