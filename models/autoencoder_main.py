@@ -370,20 +370,25 @@ def main():
             tvseparation = []
             dups = []
             nondups = []
+            sentences = [] # Original sentences and their replicas
             for ind, (input, duplicate_matrix) in enumerate(valids):
                 if ind > args.valid_batches:
                     break
                 input = Variable(input)
+                idx = random.randint(0, len(input) - 1) # which sentence?
+                orig_str = data.to_str(input[idx])
 
-                # RUN THE MODEL FOR THIS BATCH.
+                # Run on validation set.
                 if args.cuda and not input.is_cuda:
                     input = input.cuda()
                 auto, mean_s, logvar_v, log_prob = model(input, noiser)
+                reconstruction = data.sample_str(log_prob[idx])
                 vdloss, vseparation =\
                         distance_loss(log_prob, Variable(duplicate_matrix))
                 measure(log_prob, duplicate_matrix, dups, nondups)
                 tvdloss.append(vdloss.data[0])
                 tvseparation.append(vseparation.data[0])
+                sentences.append((orig_str, reconstruction))
             dups = np.array(dups)
             nondups = np.array(nondups)
             threshold = (min(dups) + max(nondups)) / 2
@@ -400,6 +405,10 @@ def main():
 
             print('Average loss: {:.6f} | Valid dloss: {:.6f} | Valid sep: {:.6f}'
                     .format(total_cost / batchcount, np.mean(tvdloss), np.mean(tvseparation)))
+            np.random.shuffle(sentences)
+            for orig, reconst in sentences[:3]:
+                print('  ' + orig)
+                print('  => ' + reconst)
             print('-' * 110)
             with open(args.save_to, 'wb') as f:
                 torch.save(model, f)

@@ -141,7 +141,6 @@ def get_reweighted_embeddings(tfidf, embeddings, sentence):
     return emb_words * emb_weights.repeat(1, 1, emb_words.size(2))
 
 
-
 def load_tokenized(path):
     '''Loads a tokenized corpus. Each line should be a sentence delimited by |.
     

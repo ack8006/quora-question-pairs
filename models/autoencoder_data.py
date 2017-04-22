@@ -94,5 +94,13 @@ class Data:
                 open(f('valid_clusters.json')))['clusters'])
         print('{} validation clusters'.format(len(self.valid_clusters)))
 
+    def to_str(self, ids):
+        '''ids: LongTensor'''
+        return ' '.join(self.glove.lookup[w] for w in ids)
+
+    def sample_str(self, log_probs):
+        return self.to_str(torch.multinomial(log_probs.exp(), 1))
+
+
 
 
