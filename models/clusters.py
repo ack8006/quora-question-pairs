@@ -29,7 +29,7 @@ def iterate_epoch(clusters, args):
         args: parameters that can be tuned (see below)'''
 
     seed_max = args.seed_size # How many initial clusters
-    take_max = args.take_max # How many duplicates from each cluster max
+    take_max = args.take_clusters # How many duplicates from each cluster max
     batch_max = args.batchsize # Size of the batches
 
     np.random.shuffle(clusters)
