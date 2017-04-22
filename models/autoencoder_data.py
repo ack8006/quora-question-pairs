@@ -17,6 +17,7 @@ def load_data(args, path, glove, limit=1000000):
     data = pd.read_csv(path, encoding='utf-8')
     data.columns = ['qid', 'question']
     data = data[:limit]
+    data['question'] = data['question'].astype(unicode)
 
     print('Cleaning and Tokenizing')
     qid, q = clean_and_tokenize(args, data, glove.dictionary)
@@ -34,7 +35,7 @@ def clean_and_tokenize(args, data, dictionary):
     qs = []
     processed = 0
     qids = [example.qid for example in data.itertuples()]
-    tokens = (unicode(example.question) for example in data.itertuples())
+    tokens = (example.question for example in data.itertuples())
     nlps = nlp.pipe(tokens, parse=False, n_threads=16, batch_size=10000)
     for qid, tokens in itertools.izip(qids, nlps):
         if processed % 10000 == 0:
@@ -48,6 +49,12 @@ def clean_and_tokenize(args, data, dictionary):
     # Question IDs tensor
     qidst = torch.LongTensor(qids)
     return qidst, qst
+
+def filter_clusters(qids, clusters):
+    qids = set(qids)
+    cl0 = [[x for x in c if x in qids] for c in clusters]
+    cl1 = [c for c in clusters if len(c) > 0]
+    return cl1
 
 class LoadedGlove:
     def __init__(self, glove):
@@ -80,10 +87,10 @@ class Data:
             self.qid_supplement, self.questions_supplement = None, None
 
         # Get clusters for train and valid
-        self.train_clusters = json.load(
-                open(f('train_clusters.json')))['clusters']
-        self.valid_clusters = json.load(
-                open(f('valid_clusters.json')))['clusters']
+        self.train_clusters = filter_clusters(self.qid_train, json.load(
+                open(f('train_clusters.json')))['clusters'])
+        self.valid_clusters = filter_clusters(json.load(
+                open(f('valid_clusters.json')))['clusters'])
 
 
 

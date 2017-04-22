@@ -23,7 +23,6 @@ def iterate_epoch(clusters, args):
     seed_max = args.seed_size # How many initial clusters
     take_max = args.take_clusters # How many duplicates from each cluster max
     batch_max = args.batchsize # Size of the batches
-    id_max = args.max_sentences
 
     # Precompute which pairs are clusters.
     dups = []
@@ -47,7 +46,6 @@ def iterate_epoch(clusters, args):
 
         # Shuffling prevents the first cluster from being unfairly
         # over-represented in case the batch needs to be cut.
-        batch = [b for b in batch if b < id_max]
         np.random.shuffle(batch)
         batch = batch[:batch_max]
 
