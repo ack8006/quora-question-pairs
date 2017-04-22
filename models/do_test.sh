@@ -5,7 +5,6 @@ CMD="python autoencoder_main.py \
         --supplement ../data/supplemental.csv \
 	--max_supplement 7000  \
 	--lr 0.001 \
-	--cuda \
 	--din 30 \
 	--dhid 50 \
 	--demb 50 \
@@ -22,6 +21,7 @@ CMD="python autoencoder_main.py \
 	--dloss_shift 5 \
 	--seed_size 15 \
 	--optimizer \
+        --debug \
 	--save_to weight_decay_5.pt"
 
 cat do_test.sh

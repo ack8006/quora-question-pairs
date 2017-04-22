@@ -71,15 +71,16 @@ class Data:
                 load_data(args, f('questions_valid.csv'), self.glove, args.max_sentences)
         if args.supplement is not None:
             print('fetching unsupervised')
-            self.qid_supplement, self.questions_supplement = \
-                    load_data(args, f('questions_supplement.csv'), self.glove, args.max_supplement)
+            _, self.questions_supplement = \
+                    load_data(args, f('supplemental.csv'), self.glove, args.max_supplement)
         else:
             self.qid_supplement, self.questions_supplement = None, None
 
         # Get clusters for train and valid
-        self.train_clusters = json.load(open(f('train_clusters.json')))
-        self.valid_clusters = json.load(open(f('valid_clusters.json')))
-        self.dupset clusters.read_dupset(f('all_duplicates.tsv'))
+        self.train_clusters = json.load(
+                open(f('train_clusters.json')))['clusters']
+        self.valid_clusters = json.load(
+                open(f('valid_clusters.json')))['clusters']
 
 
 

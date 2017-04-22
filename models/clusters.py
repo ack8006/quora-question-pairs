@@ -12,7 +12,26 @@ def read_dupset(path):
         dups.append((row[1], row[0]))
     return set(dups)
 
-def iterate_epoch(clusters, seed_max=10, take_max=10, batch_max=80):
+def iterate_epoch(clusters, args):
+    '''Given a list of clusters, sample batches from them in a way that goes
+    through all clusters, but still have plenty of same-cluster examples per
+    batch.
+
+    The way it works: for each batch, randomly pick a few (k) clusters, and
+    take a few ids (m) from them at random. If the number of examples is still
+    fewer than batch size (b), randomly take single examples from any cluster
+    until the batch size is fulfilled.
+
+    Typically k, m < b, but km > b. For example, k=m=10, and b=80.
+    
+    Args:
+        clusters: a list of list of numbers that are clusters.
+        args: parameters that can be tuned (see below)'''
+
+    seed_max = args.seed_size # How many initial clusters
+    take_max = args.take_max # How many duplicates from each cluster max
+    batch_max = args.batchsize # Size of the batches
+
     np.random.shuffle(clusters)
     for idx in xrange(0, len(clusters), seed_max): # Seed size
         # Get a selection of duplicates as the seed.
@@ -22,6 +41,9 @@ def iterate_epoch(clusters, seed_max=10, take_max=10, batch_max=80):
             batch.extend(cluster[:take_max])
             if len(batch) > batch_max:
                 break
+
+        # Shuffling prevents the first cluster from being unfairly
+        # over-represented in case the batch needs to be cut.
         np.random.shuffle(batch)
         batch = batch[:batch_max]
 
@@ -34,12 +56,18 @@ def iterate_epoch(clusters, seed_max=10, take_max=10, batch_max=80):
                 check[qid] = len(batch)
                 batch.append(qid)
 
-        mtx = np.zeros((len(batch), len(batch)), dtype=np.int32)
+        mtx = np.zeros((batch_max, batch_max), dtype=np.int32)
         for i, q1 in enumerate(batch):
             for j, q2 in enumerate(batch):
                 mtx[i,j] = (q1, q2) in dupset
-        #print(mtx.sum(axis=1))
 
-        # Yield input, duplicate matrix
+        # Print the proportion of duplicate pairs in batch.
+        if args.debug and idx % 50 == 0:
+            assert batch_max == len(batch)
+            prop_dup = mtx.sum() / (batch_max * (batch_max - 1))
+            print('batch duplicates: {0:.5f}'.format(prop_dup))
+
+        # Yield question ids, duplicate matrix
+        batch = torch.LongTensor(batch)
         mtx = torch.from_numpy(mtx)
-        yield (batch_qs, mtx)
+        yield (batch, mtx)

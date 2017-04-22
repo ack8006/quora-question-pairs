@@ -9,6 +9,7 @@ import math
 import data
 from autoencoder_data import Data
 import pickle
+import clusters
 
 import numpy as np
 import pandas as pd
@@ -21,6 +22,75 @@ from torch.utils.data import TensorDataset, DataLoader
 
 from models import BiLSTM, EmbeddingAutoencoder
 
+parser = argparse.ArgumentParser(description='PyTorch Quora RNN/LSTM Language Model')
+parser.add_argument('--datadir', type=str, default='../data',
+                    help='location of the data corpus')
+parser.add_argument('--supplement', type=str, default=None,
+                    help='unlabeled supplemental data')
+parser.add_argument('--max_sentences', type=int, default=1000000,
+                    help='max num of sentences to train on')
+parser.add_argument('--max_supplement', type=int, default=1000000,
+                    help='max num of supplemental sentences to train on')
+parser.add_argument('--din', type=int, default=30,
+                    help='length of LSTM')
+parser.add_argument('--demb', type=int, default=100,
+                    help='size of word embeddings')
+parser.add_argument('--dhid', type=int, default=100,
+                    help='humber of hidden units per layer')
+parser.add_argument('--dout', type=int, default=2,
+                    help='number of output classes')
+parser.add_argument('--nlayers', type=int, default=1,
+                    help='number of layers')
+parser.add_argument('--lr', type=float, default=0.05,
+                    help='initial learning rate')
+parser.add_argument('--clip', type=float, default=0.25,
+                    help='gradient clipping')
+parser.add_argument('--noise_stdev', type=float, default=0.05,
+                    help='noise distribution standard deviation')
+parser.add_argument('--sloss_factor', type=float, default=0.1,
+                    help='supplemental loss scaling')
+parser.add_argument('--dloss_factor', type=float, default=1.0,
+                    help='distance loss scaling')
+parser.add_argument('--dloss_shift', type=int, default=4,
+                    help='when should dloss gating reach 0.5')
+parser.add_argument('--sloss_shift', type=int, default=4,
+                    help='when should sloss gating reach 0.5')
+parser.add_argument('--sloss_slope', type=float, default=1.0,
+                    help='when should sloss gating reach 0.5')
+parser.add_argument('--dloss_slope', type=float, default=1.0,
+                    help='how quickly dloss goes from 0...1')
+parser.add_argument('--embinit', type=str, default='random',
+                    help='embedding weight initialization type')
+parser.add_argument('--squash_size', type=int, default=40,
+                    help='sentence embedding squash size')
+parser.add_argument('--seed_size', type=int, default=10,
+                    help='how many seed points from which to sample duplicates')
+parser.add_argument('--dropout', type=float, default=0.5,
+                    help='dropout applied to layers (0 = no dropout)')
+parser.add_argument('--more_dropout', action='store_true',
+                    help='activate dropout on the embedding layers')
+parser.add_argument('--epochs', type=int, default=2,
+                    help='epochs to train against.')
+parser.add_argument('--batchsize', type=int, default=25, metavar='N',
+                    help='batch size')
+parser.add_argument('--batches', type=int, default=300,
+                    help='max batches in an epoch')
+parser.add_argument('--weight_decay', type=float, default=0.0,
+                    help='optimizer weight decay')
+parser.add_argument('--vocabsize', type=int, default=20000,
+                    help='how many words to get from glove')
+parser.add_argument('--optimizer', action='store_true',
+                    help='use ADAM optimizer')
+parser.add_argument('--cuda', action='store_true',
+                    help='use CUDA')
+parser.add_argument('--debug', action='store_true',
+                    help='print more debugging information.')
+parser.add_argument('--loginterval', type=int, default=100, metavar='N',
+                    help='report interval')
+parser.add_argument('--save_to', type=str,  default='autoencoder_3.pt',
+                    help='path to save the final model')
+args = parser.parse_args()
+
 def logistic(slope, shift, x):
     gate0 = slope * (x - shift)
     return 1.0 / (1.0 + math.exp(-gate0))
@@ -31,7 +101,39 @@ def scheduler(config):
     slope, shift = config
     return (logistic(slope, shift, x) for x in itertools.count())
 
-def generate_supplement(args, questions):
+def cache(x, batchsize=250):
+    '''Given an iterator, precompute some of its entries.'''
+    cache = [] # Batch of batches.
+    for item in x:
+        if len(cache) == batchsize:
+            for c in cache:
+                yield c
+            cache = []
+        cache.append(item)
+    for c in cache:
+        yield c
+
+def generate_train(args, data):
+    '''Generates training batches.'''
+    def batch():
+        for batch_qids, mtx in clusters.iterate_epoch(
+                data.train_clusters, args):
+            if args.batches > 0 and dup_batch / seed_size > args.batches:
+                return
+
+            batch_qs = data.questions_train[batch_qids]
+
+            # Yield input, duplicate matrix
+            if args.cuda:
+                batch_qs = batch_qs.cuda()
+                mtx = mtx.cuda()
+            yield (batch_qs, mtx)
+
+    for e in range(args.epochs):
+        yield batch()
+
+def generate_supplement(args, data):
+    questions = data.questions_supplement
     indices = range(len(questions))
     cd = lambda x: x if not args.cuda else x.cuda()
 
@@ -44,34 +146,6 @@ def generate_supplement(args, questions):
                 continue
             batch_indices = indices[batch:(batch + args.batchsize)]
             yield cd(questions[torch.LongTensor(batch_indices)])
-
-def cache(x, batchsize=250):
-    cache = [] # Batch of batches.
-    for item in x:
-        if len(cache) == batchsize:
-            for c in cache:
-                yield c
-            cache = []
-        cache.append(item)
-    for c in cache:
-        yield c
-
-
-def generate(args, data, clusters_list):
-    def batch():
-        for batch_qs, mtx in clusters.iterate_epoch(clusters_list, args):
-            if args.batches > 0 and dup_batch / seed_size > args.batches:
-                return
-
-            # Yield input, duplicate matrix
-            if args.cuda:
-                batch_qs = batch_qs.cuda()
-                mtx = mtx.cuda()
-            yield (batch_qs, mtx)
-
-    print('Analysis done. Ready to generate batches.')
-    for e in range(args.epochs):
-        yield batch()
 
 
 eye = torch.eye(200)
@@ -130,73 +204,6 @@ def noise(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='PyTorch Quora RNN/LSTM Language Model')
-    parser.add_argument('--datadir', type=str, default='../data',
-                        help='location of the data corpus')
-    parser.add_argument('--supplement', type=str, default=None,
-                        help='unlabeled supplemental data')
-    parser.add_argument('--max_sentences', type=int, default=1000000,
-                        help='max num of sentences to train on')
-    parser.add_argument('--max_supplement', type=int, default=1000000,
-                        help='max num of supplemental sentences to train on')
-    parser.add_argument('--din', type=int, default=30,
-                        help='length of LSTM')
-    parser.add_argument('--demb', type=int, default=100,
-                        help='size of word embeddings')
-    parser.add_argument('--dhid', type=int, default=100,
-                        help='humber of hidden units per layer')
-    parser.add_argument('--dout', type=int, default=2,
-                        help='number of output classes')
-    parser.add_argument('--nlayers', type=int, default=1,
-                        help='number of layers')
-    parser.add_argument('--lr', type=float, default=0.05,
-                        help='initial learning rate')
-    parser.add_argument('--clip', type=float, default=0.25,
-                        help='gradient clipping')
-    parser.add_argument('--noise_stdev', type=float, default=0.05,
-                        help='noise distribution standard deviation')
-    parser.add_argument('--sloss_factor', type=float, default=0.1,
-                        help='supplemental loss scaling')
-    parser.add_argument('--dloss_factor', type=float, default=1.0,
-                        help='distance loss scaling')
-    parser.add_argument('--dloss_shift', type=int, default=4,
-                        help='when should dloss gating reach 0.5')
-    parser.add_argument('--sloss_shift', type=int, default=4,
-                        help='when should sloss gating reach 0.5')
-    parser.add_argument('--sloss_slope', type=float, default=1.0,
-                        help='when should sloss gating reach 0.5')
-    parser.add_argument('--dloss_slope', type=float, default=1.0,
-                        help='how quickly dloss goes from 0...1')
-    parser.add_argument('--embinit', type=str, default='random',
-                        help='embedding weight initialization type')
-    parser.add_argument('--squash_size', type=int, default=40,
-                        help='sentence embedding squash size')
-    parser.add_argument('--seed_size', type=int, default=10,
-                        help='how many seed points from which to sample duplicates')
-    parser.add_argument('--dropout', type=float, default=0.5,
-                        help='dropout applied to layers (0 = no dropout)')
-    parser.add_argument('--more_dropout', action='store_true',
-                        help='activate dropout on the embedding layers')
-    parser.add_argument('--epochs', type=int, default=2,
-                        help='epochs to train against.')
-    parser.add_argument('--batchsize', type=int, default=25, metavar='N',
-                        help='batch size')
-    parser.add_argument('--batches', type=int, default=300,
-                        help='max batches in an epoch')
-    parser.add_argument('--weight_decay', type=float, default=0.0,
-                        help='optimizer weight decay')
-    parser.add_argument('--vocabsize', type=int, default=20000,
-                        help='how many words to get from glove')
-    parser.add_argument('--optimizer', action='store_true',
-                        help='use ADAM optimizer')
-    parser.add_argument('--cuda', action='store_true',
-                        help='use CUDA')
-    parser.add_argument('--loginterval', type=int, default=100, metavar='N',
-                        help='report interval')
-    parser.add_argument('--save_to', type=str,  default='autoencoder_3.pt',
-                        help='path to save the final model')
-    args = parser.parse_args()
-
     data = Data(args)
     embedding = data.glove.module
     bilstm_encoder = BiLSTM(args.demb, args.dhid, args.nlayers, args.dropout)
@@ -222,6 +229,11 @@ def main():
     recent_dloss = 0
     recent_sloss = 0
     recent_sep = 0
+
+    train_loader = generate_train(args, data)
+    supplement_loader = None
+    if data.questions_supplement is not None:
+        supplement_loader = generate_supplement(args, data)
 
     try:
         for (eid, batches) in enumerate(train_loader):
