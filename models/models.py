@@ -178,10 +178,14 @@ class EmbeddingAutoencoder(nn.Module):
         self.word_embedding = word_embedding
         self.bilstm_encoder = bilstm_encoder
         self.bilstm_decoder = bilstm_decoder
-        # Times 2 because of bidirectional.
-        self.fc_embedding = FC(self.bilstm_encoder.lstm.hidden_size
-                * 2 * self.bilstm_decoder.lstm.num_layers,
-                embed_size, dropout) # Reduce dimensionality before taking distance.
+
+        # Between encoder and decoder, do VAE.
+        encoder_dim = self.bilstm_encoder.lstm.hidden_size \
+                * 2 * self.bilstm_decoder.lstm.num_layers
+        self.fc_mean = FC(encoder_dim, embed_size, 0.0)
+        self.fc_std = FC(encoder_dim, embed_size, 0.0)
+        self.fc_expand = FC(embed_size, encoder_dim, 0.0)
+
         self.fc_decoder = FC(self.bilstm_decoder.lstm.hidden_size * 2,
                 self.word_embedding.num_embeddings, dropout)
         self.batchnorm = nn.BatchNorm1d(
@@ -214,8 +218,7 @@ class EmbeddingAutoencoder(nn.Module):
         '''Run X through the encoder part. Args:
             X: B x Seq_Len x D word embeddings
         Returns:
-            hid: 2N x B x D encoded sentence for each batch.
-            flat: B x 2ND tensor same as hid, but flattened.'''
+            hid: 2N x B x D encoded sentence for each batch.'''
         h0 = self.init_hidden(X.size(0), self.bilstm_encoder.lstm)
         _, hid, _ = self.bilstm_encoder(X, h0) # Want only the hidden states.
 
@@ -226,9 +229,7 @@ class EmbeddingAutoencoder(nn.Module):
         hid = hn.view(hid.size(1), hid.size(0), hid.size(2)).transpose(1, 0)
         if noise:
             hid = hid + noise(hid.size())
-
-        flat = torch.cat(torch.chunk(hid, hid.size(0)), 2)[0]
-        return hid, flat
+        return hid
 
     def decoder(self, h, X):
         '''Run X through the decoder part. Args:
@@ -267,7 +268,7 @@ class EmbeddingAutoencoder(nn.Module):
         #print(log_probs[3])
         return log_probs
 
-    def forward(self, X1, noise=None, Xs=None):
+    def forward(self, X1, noise=None, calculate_dist=True):
         '''Args:
             X1: B x Seq_Len word tokens
             noise: noise generator to use in training
@@ -277,18 +278,22 @@ class EmbeddingAutoencoder(nn.Module):
             prob: pairwise probabilities between X1 and X2 FloatTensor Variable
                   of size B x B'''
         X1 = self.drop(self.word_embedding(X1))
-        h1, emb1 = self.encoder(X1, noise)
-        auto_X1 = self.decoder(h1, X1)
-        prob = self.pair_log_probabilities(emb1)
+        h1 = self.encoder(X1, noise)
 
-        auto_Xs = None
-        if Xs is not None:
-            # Run the examples on other supplemental data.
-            Xs = self.drop(self.word_embedding(Xs))
-            hs, embs = self.encoder(Xs, noise)
-            auto_Xs = self.decoder(hs, Xs)
+        # Compute variational sample
+        h1t = h1.transpose(0, 1)
+        flat = h1t.view(h1.size(0), -1)
+        mean = self.fc_mean(flat)
+        logvar = self.fc_logvar(flat)
+        emb1 = noise(mean.size()) * (logvar / 2).exp() + mean
+        h1_noised = emb1.view(h1t.size()).transpose(1, 0)
+
+        auto_X1 = self.decoder(h1_noised, X1)
+        prob = None
+        if calculate_dist:
+            prob = self.pair_log_probabilities(emb1)
             
-        return auto_X1, prob, auto_Xs
+        return auto_X1, mean, logvar, prob
 
     def init_hidden(self, batch_size, lstm):
         layer_dir = lstm.num_layers * 2

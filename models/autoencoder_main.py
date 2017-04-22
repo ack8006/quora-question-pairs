@@ -93,6 +93,10 @@ parser.add_argument('--save_to', type=str,  default='autoencoder_3.pt',
                     help='path to save the final model')
 args = parser.parse_args()
 
+def kl_div_with_std_norm(mean, logvar):
+    """KL divergence with standard multivariate normal. Consumes both inputs"""
+    return torch.squeeze(torch.sum(logvar.exp() + mean * mean - logvar - 1, 1) / 2)
+
 def logistic(slope, shift, x):
     gate0 = slope * (x - shift)
     return 1.0 / (1.0 + math.exp(-gate0))
@@ -258,6 +262,7 @@ def main():
 
     train_loader = generate_train(args, data)
     valid_loader = generate_valid(args, data)
+    noiser = noise(args)
     supplement_loader = None
     if data.questions_supplement is not None:
         supplement_loader = generate_supplement(args, data)
@@ -287,23 +292,23 @@ def main():
                 # RUN THE MODEL FOR THIS BATCH.
                 if args.cuda and not input.is_cuda:
                     input = input.cuda()
-                supp = None
-                if supplement_loader is not None:
-                    supp = Variable(next(supplement_loader))
-                auto, log_prob, supp_auto = \
-                    model(input, noise(args), supp)
+                auto, mean, logvar, log_prob = model(input, noiser)
                 rloss = bsz * reconstruction_loss(
                         auto.view(-1, args.vocabsize), input.view(-1))
                 dloss, separation = distance_loss(
                         log_prob, Variable(duplicate_matrix))
-                loss = rloss + dloss_factor * dloss
+                kl = kl_div_with_std_norm(mean, logvar)
+                loss = rloss + dloss_factor * dloss + kl_factor * kl
 
                 sloss = 0.0
-                if supp is not None:
+                if supplement_loader is not None:
                     # Supplemental loss.
+                    supp = Variable(next(supplement_loader))
+                    auto_s, mean_s, logvar_s, _ = model(supp, noiser, False)
                     sloss = bsz * reconstruction_loss(
-                            supp_auto.view(-1, args.vocabsize), supp.view(-1))
-                    loss = loss + sloss_factor * sloss
+                            auto_s.view(-1, args.vocabsize), supp.view(-1))
+                    kl_s = kl_div_with_std_norm(mean, logvar)
+                    loss = loss + sloss_factor * (sloss + kl_factor * kl_s)
 
                 if first_batch:
                     #print(input)
@@ -313,12 +318,7 @@ def main():
 
                 loss.backward()
                 clip_grad_norm(model.parameters(), args.clip)
-
-                if optimizer:
-                    optimizer.step()
-                else:
-                    for p in model.parameters():
-                        p.data.add_(-args.lr, p.grad.data)
+                optimizer.step()
 
                 total_cost += loss.data[0]
                 recent_rloss = 0.9 * recent_rloss + 0.1 * rloss.data[0]
