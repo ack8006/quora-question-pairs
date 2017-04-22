@@ -281,8 +281,6 @@ def main():
     recent_sep = 0
     add_to_average = lambda r, v: 0.9 * r + 0.1 * v
 
-    fmt = lambda f: '{:.6f}'.format(f)[:8]
-
     train_loader = generate_train(args, data)
     valid_loader = generate_valid(args, data)
     noiser = noise(args)
@@ -295,6 +293,8 @@ def main():
 
     try:
         total_batchcount = 0
+        # The math below makes the average accurate at low batch numbers.
+        fmt = lambda f: '{:.6f}'.format(f / (1 - 0.9**(total_batchcount)))[:8]
         for (eid, (batches, valids)) in enumerate(itertools.izip(
                 train_loader, valid_loader)):
             model.train()
@@ -310,6 +310,7 @@ def main():
             batchcount = 0
             for ind, (input, duplicate_matrix) in enumerate(cur_batches):
                 batchcount = ind + 1
+                total_batchcount += 1
                 start_time = time.time()
                 input = Variable(input)
                 model.zero_grad()
@@ -360,8 +361,8 @@ def main():
 
                 #if ind > 100:
                     #return  # for testing only
-                if ind % args.loginterval == 0 and ind > 0:
-                    cur_loss = total_cost / (ind * args.batchsize)
+                if total_batchcount % args.loginterval == 0 \
+                        and total_batchcount > 0:
                     elapsed = time.time() - start_time
                     # Each 0.1234/0.7356 loss is reconstruction/kl-div
                     print('Epoch {} | Batch {:5d} | ms/batch {:5.2f} | '
@@ -371,7 +372,6 @@ def main():
                                 fmt(recent_rloss), fmt(recent_kl),
                                 fmt(recent_sloss), fmt(recent_kl_s),
                                 fmt(recent_dloss), fmt(recent_sep)))
-                total_batchcount += 1
 
             # Run model on validation set.
             model.eval()
