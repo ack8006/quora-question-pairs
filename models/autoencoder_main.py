@@ -124,8 +124,8 @@ def generate_train(args, data):
             if args.batches > 0 and batch_idx > args.batches:
                 return
 
-            batch_qs = data.questions_train[{
-                rlookup[qid] for qid in batch_qids}]
+            batch_qs = data.questions_train[torch.LongTensor([
+                rlookup[qid] for qid in batch_qids])]
 
             # Yield input, duplicate matrix
             if args.cuda:
