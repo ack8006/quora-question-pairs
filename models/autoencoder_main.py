@@ -390,7 +390,7 @@ def main():
                 if args.cuda and not input.is_cuda:
                     input = input.cuda()
                 auto, mean_s, logvar_v, log_prob = model(input, noiser)
-                reconstruction = data.sample_str(log_prob[idx].data)
+                reconstruction = data.sample_str(auto[idx].data)
                 vdloss, vseparation =\
                         distance_loss(log_prob, Variable(duplicate_matrix))
                 measure(log_prob, duplicate_matrix, dups, nondups)
