@@ -283,7 +283,6 @@ class EmbeddingAutoencoder(nn.Module):
                   of size B x B'''
         X1 = self.drop(self.word_embedding(X1))
         hn = self.encoder(X1) # B x 2ND
-        print(hn.size())
 
         # Compute variational sample
         mean = self.fc_mean(hn)

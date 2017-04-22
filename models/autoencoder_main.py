@@ -270,7 +270,7 @@ def main():
     recent_kl = 0
     recent_dloss = 0
     recent_sloss = 0
-    recent_kls = 0
+    recent_kl_s = 0
     recent_sep = 0
     add_to_average = lambda r, v: 0.9 * r + 0.1 * v
 
@@ -377,8 +377,7 @@ def main():
                 # RUN THE MODEL FOR THIS BATCH.
                 if args.cuda and not input.is_cuda:
                     input = input.cuda()
-                auto, log_prob, _ = \
-                    model(input, noise(args), None)
+                auto, mean_s, logvar_v, log_prob = model(input, noiser)
                 vdloss, vseparation =\
                         distance_loss(log_prob, Variable(duplicate_matrix))
                 measure(log_prob, duplicate_matrix, dups, nondups)
