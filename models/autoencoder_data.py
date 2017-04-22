@@ -34,7 +34,7 @@ def clean_and_tokenize(args, data, dictionary):
     qs = []
     processed = 0
     qids = [example.qid for example in data.itertuples()]
-    tokens = (example.question for example in data.itertuples())
+    tokens = (unicode(example.question) for example in data.itertuples())
     nlps = nlp.pipe(tokens, parse=False, n_threads=16, batch_size=10000)
     for qid, tokens in itertools.izip(qids, nlps):
         if processed % 10000 == 0:
