@@ -36,7 +36,7 @@ def iterate_epoch(clusters, args):
     for idx in xrange(0, len(clusters), seed_max): # Seed size
         # Get a selection of duplicates as the seed.
         batch = []
-        for cluster in clusters[:seed_max]
+        for cluster in clusters[:seed_max]:
             np.random.shuffle(cluster)
             batch.extend(cluster[:take_max])
             if len(batch) > batch_max:

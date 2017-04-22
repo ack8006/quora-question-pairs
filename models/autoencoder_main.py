@@ -37,8 +37,6 @@ parser.add_argument('--demb', type=int, default=100,
                     help='size of word embeddings')
 parser.add_argument('--dhid', type=int, default=100,
                     help='humber of hidden units per layer')
-parser.add_argument('--dout', type=int, default=2,
-                    help='number of output classes')
 parser.add_argument('--nlayers', type=int, default=1,
                     help='number of layers')
 parser.add_argument('--lr', type=float, default=0.05,
@@ -64,7 +62,9 @@ parser.add_argument('--embinit', type=str, default='random',
 parser.add_argument('--squash_size', type=int, default=40,
                     help='sentence embedding squash size')
 parser.add_argument('--seed_size', type=int, default=10,
-                    help='how many seed points from which to sample duplicates')
+                    help='batch generation: how many seed clusters per batch')
+parser.add_argument('--take_clusters', type=int, default=10,
+                    help='batch generation: how many seed points per seed clusters')
 parser.add_argument('--dropout', type=float, default=0.5,
                     help='dropout applied to layers (0 = no dropout)')
 parser.add_argument('--more_dropout', action='store_true',
