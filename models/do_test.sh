@@ -8,7 +8,7 @@ CMD="python autoencoder_main.py \
 	--din 30 \
 	--dhid 50 \
 	--demb 50 \
-	--epochs 25 --batches 50 --batchsize 20 \
+	--epochs 25 --batches 30 --batchsize 20 \
 	--dropout 0.5 \
 	--nlayers 1 \
 	--squash_size 100 \

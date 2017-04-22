@@ -204,9 +204,9 @@ def measure(log_prob, duplicate_matrix, dups, nondups):
     for i in range(B):
         for j in range(i+1,B):
             if duplicate_matrix[i, j]:
-                dups.append(log_prob[i, j])
+                dups.append(log_prob[i, j].data[0])
             else:
-                nondups.append(log_prob[i, j])
+                nondups.append(log_prob[i, j].data[0])
 
 
 def noise(args):
