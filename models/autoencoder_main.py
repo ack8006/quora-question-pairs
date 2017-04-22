@@ -113,18 +113,18 @@ def cache(x, batchsize=250):
     for c in cache:
         yield c
 
-def generate_train(args, data):
+def generate_labeled(args, qid, clusters, questions):
     '''Generates training batches.'''
-    rlookup = {qid: i for i, qid in enumerate(data.qid_train)}
+    rlookup = {qid: i for i, qid in enumerate(qid)}
     if args.debug:
         print(rlookup)
     def batch():
         for batch_idx, (batch_qids, mtx) in enumerate(
-                clusters.iterate_epoch(data.train_clusters, args)):
+                clusters.iterate_epoch(clusters, args)):
             if args.batches > 0 and batch_idx > args.batches:
                 return
 
-            batch_qs = data.questions_train[torch.LongTensor([
+            batch_qs = questions[torch.LongTensor([
                 rlookup[qid] for qid in batch_qids])]
 
             # Yield input, duplicate matrix
@@ -135,6 +135,14 @@ def generate_train(args, data):
 
     for e in range(args.epochs):
         yield batch()
+
+def generate_train(args, data):
+    return generate_labeled(
+            args, data.qid_train, data.train_clusters, data.questions_train)
+
+def generate_valid(args, data):
+    return generate_labeled(
+            args, data.qid_valid, data.valid_clusters, data.questions_valid)
 
 def generate_supplement(args, data):
     questions = data.questions_supplement
@@ -155,10 +163,8 @@ def generate_supplement(args, data):
 eye = torch.eye(200)
 if args.cuda:
     eye = eye.cuda()
-def distance_loss(log_prob, duplicate_matrix, eye):
-    '''Args:
-        log_prob: B*B sized array of log probabilities.
-        duplicate_matrix: B*B array of is_duplicates.'''
+
+def normalize(log_prob, duplicate_matrix):
     B = duplicate_matrix.size(0)
     duplicate_matrix = duplicate_matrix.float()
     my_eye = Variable(eye[:B, :B])
@@ -168,9 +174,13 @@ def distance_loss(log_prob, duplicate_matrix, eye):
     prob = log_prob.exp() + 1e-8
     prob = prob - (my_eye * prob)
     prob = prob / prob.sum(dim=1).repeat(1, B)
+    return prob, duplicate_matrix, non_duplicate_matrix
 
-    #print(duplicate_matrix)
-    #print(non_duplicate_matrix)
+def distance_loss(log_prob, duplicate_matrix):
+    '''Args:
+        log_prob: B*B sized array of log probabilities.
+        duplicate_matrix: B*B array of is_duplicates.'''
+    prob, duplicate_matrix, non_duplicate_matrix = normalize(log_prob)
 
     pd = prob * duplicate_matrix
     # Set to 1 all cells that aren't probability of duplicate so we can
@@ -185,6 +195,28 @@ def distance_loss(log_prob, duplicate_matrix, eye):
 
     # Gap loss between lest likely duplicate and most likely non-duplicate.
     return (1 + max_non - min_dup).mean(), (max_dup - max_non).mean()
+
+def measure(log_prob, duplicate_matrix):
+    '''Measures the accuracy of separating duplicates from non-duplicates'''
+    has_dup = duplicate_matrix.sum(dim=1).gt(0)
+    log_prob = log_prob[has_dup].transpose(0, 1)[has_dup].transpose(0, 1)
+    duplicate_matrix = duplicate_matrix[has_dup].transpose(0, 1)[has_dup].transpose(0, 1)
+    prob, duplicate_matrix, non_duplicate_matrix = normalize(log_prob)
+
+    B = duplicate_matrix.size(0)
+    my_eye = Variable(eye[:B, :B])
+
+    predict_duplicate = prob > 0.5
+    predict_non_duplicate = prob < 0.5
+
+    true_positive = predict_duplicate * duplicate_matrix 
+    false_positive = predict_duplicate * non_duplicate_matrix 
+    true_negative = predict_non_duplicate * non_duplicate_matrix 
+    false_negative = predict_non_duplicate * duplicate_matrix 
+
+    return np.array([  # predicted
+        [true_positive, false_negative], # true label
+        [false_positive, true_negative]])
 
 
 def noise(args):
@@ -235,12 +267,14 @@ def main():
     recent_sep = 0
 
     train_loader = generate_train(args, data)
+    valid_loader = generate_valid(args, data)
     supplement_loader = None
     if data.questions_supplement is not None:
         supplement_loader = generate_supplement(args, data)
 
     try:
-        for (eid, batches) in enumerate(train_loader):
+        for (eid, (batches, valids)) in enumerate(itertools.izip(
+                train_loader, valid_loader)):
             model.train()
             total_cost = 0
             first_batch = True
@@ -271,7 +305,7 @@ def main():
                 rloss = bsz * reconstruction_loss(
                         auto.view(-1, args.vocabsize), input.view(-1))
                 dloss, separation = distance_loss(
-                        log_prob, Variable(duplicate_matrix), eye)
+                        log_prob, Variable(duplicate_matrix))
                 loss = rloss + dloss_factor * dloss
 
                 sloss = 0.0
@@ -312,6 +346,22 @@ def main():
                                 eid, ind, args.batches,
                                 elapsed * 1000.0 / args.loginterval,
                                 recent_rloss, recent_sloss, recent_dloss, recent_sep))
+
+            # Run model on validation set.
+            model.eval()
+            cm = np.zeros((2, 2))
+            for ind, (input, duplicate_matrix) in enumerate(cur_batches):
+                if ind > 10:
+                    break
+                input = Variable(input)
+
+                # RUN THE MODEL FOR THIS BATCH.
+                if args.cuda and not input.is_cuda:
+                    input = input.cuda()
+                auto, log_prob, _ = \
+                    model(input, noise(args), None)
+                cm += measure(log_prob, Variable(duplicate_matrix))
+            print(cm)
 
             print('Average loss: {:.6f}'.format(total_cost / batchcount))
             print('-' * 110)
