@@ -8,7 +8,7 @@ CMD="python autoencoder_main.py \
 	--din 30 \
 	--dhid 50 \
 	--demb 50 \
-	--epochs 25 --batches 200 --batchsize 20 \
+	--epochs 25 --batches 400 --batchsize 20 \
 	--dropout 0.5 \
 	--nlayers 1 \
 	--squash_size 100 \
@@ -22,7 +22,7 @@ CMD="python autoencoder_main.py \
 	--kloss_slope 1 \
 	--loginterval 20 \
 	--kloss_shift 10 \
-	--seed_size 20 \
+	--seed_size 10 \
         --debug \
 	--save_to weight_decay_5.pt"
 

@@ -53,7 +53,7 @@ def clean_and_tokenize(args, data, dictionary):
 def filter_clusters(qids, clusters):
     qids = set(qids)
     cl0 = [[x for x in c if x in qids] for c in clusters]
-    cl1 = [c for c in cl0 if len(c) > 0]
+    cl1 = [c for c in cl0 if len(c) > 1]
     return cl1
 
 class LoadedGlove:
