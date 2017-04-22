@@ -113,14 +113,14 @@ def cache(x, batchsize=250):
     for c in cache:
         yield c
 
-def generate_labeled(args, qid, clusters, questions):
+def generate_labeled(args, qid, clusters_list, questions):
     '''Generates training batches.'''
     rlookup = {qid: i for i, qid in enumerate(qid)}
     if args.debug:
         print(rlookup)
     def batch():
         for batch_idx, (batch_qids, mtx) in enumerate(
-                clusters.iterate_epoch(clusters, args)):
+                clusters.iterate_epoch(clusters_list, args)):
             if args.batches > 0 and batch_idx > args.batches:
                 return
 
