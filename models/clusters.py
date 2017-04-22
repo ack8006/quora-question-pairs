@@ -4,14 +4,6 @@ import torch
 import itertools
 import random
 
-def read_dupset(path):
-    frame = pd.read_csv(path, delimiter='\t', index_col=None, header=None)
-    dups = []
-    for row in frame.itertuples():
-        dups.append((row[0], row[1]))
-        dups.append((row[1], row[0]))
-    return set(dups)
-
 def iterate_epoch(clusters, args):
     '''Given a list of clusters, sample batches from them in a way that goes
     through all clusters, but still have plenty of same-cluster examples per
@@ -31,6 +23,16 @@ def iterate_epoch(clusters, args):
     seed_max = args.seed_size # How many initial clusters
     take_max = args.take_clusters # How many duplicates from each cluster max
     batch_max = args.batchsize # Size of the batches
+
+    # Precompute which pairs are clusters.
+    dups = []
+    for c in clusters:
+        for i in c:
+            for j in c:
+                dups.append((i, j))
+                dups.append((j, i))
+    dupset = set(dups)
+    del dups
 
     np.random.shuffle(clusters)
     for idx in xrange(0, len(clusters), seed_max): # Seed size

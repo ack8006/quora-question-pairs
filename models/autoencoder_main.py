@@ -115,13 +115,15 @@ def cache(x, batchsize=250):
 
 def generate_train(args, data):
     '''Generates training batches.'''
+    rlookup = {qid: i for i, qid in enumerate(data.qid_train)}
     def batch():
-        for batch_qids, mtx in clusters.iterate_epoch(
-                data.train_clusters, args):
-            if args.batches > 0 and dup_batch / seed_size > args.batches:
+        for batch_idx, (batch_qids, mtx) in enumerate(clusters.iterate_epoch(
+                data.train_clusters, args)):
+            if args.batches > 0 and batch_idx > args.batches:
                 return
 
-            batch_qs = data.questions_train[batch_qids]
+            batch_qs = data.questions_train[{
+                rlookup[qid] for qid in batch_qids}]
 
             # Yield input, duplicate matrix
             if args.cuda:
@@ -272,6 +274,7 @@ def main():
 
                 sloss = 0.0
                 if supp is not None:
+                    # Supplemental loss.
                     sloss = bsz * reconstruction_loss(
                             supp_auto.view(-1, args.vocabsize), supp.view(-1))
                     loss = loss + sloss_factor * sloss

@@ -7,6 +7,7 @@ import json
 import data
 import numpy as np
 import torch
+import itertools
 
 nlp = spacy.load('en', parser=False)
 
@@ -30,16 +31,18 @@ def clean_and_tokenize(args, data, dictionary):
         qv[:len(ql)] = ql[:args.din] # set values
         return qv
 
-    qids = []
     qs = []
     processed = 0
-    for example in data.itertuples():
+    qids = [example.qid for example in data.itertuples()]
+    tokens = (example.question for example in data.itertuples())
+    nlps = nlp.pipe(tokens, parse=False, n_threads=16, batch_size=10000)
+    for qid, tokens in itertools.izip(qids, nlps):
         if processed % 10000 == 0:
             print('processed {0}'.format(processed))
-        tokens = nlp(example.question, parse=False)
-        qids.append(example.qid)
         qs.append(to_indices(tokens))
         processed += 1
+    assert len(qids) == len(data)
+    assert len(qs) == len(data)
     # Questions tensor
     qst = torch.LongTensor(np.stack(qs, axis=0))
     # Question IDs tensor
