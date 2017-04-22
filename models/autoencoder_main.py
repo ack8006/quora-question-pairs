@@ -31,6 +31,8 @@ parser.add_argument('--max_sentences', type=int, default=1000000,
                     help='max num of sentences to train on')
 parser.add_argument('--max_supplement', type=int, default=1000000,
                     help='max num of supplemental sentences to train on')
+
+# Network size (embed size, sentence size, nlayers, etc)
 parser.add_argument('--din', type=int, default=30,
                     help='length of LSTM')
 parser.add_argument('--demb', type=int, default=100,
@@ -39,28 +41,40 @@ parser.add_argument('--dhid', type=int, default=100,
                     help='humber of hidden units per layer')
 parser.add_argument('--nlayers', type=int, default=1,
                     help='number of layers')
+parser.add_argument('--squash_size', type=int, default=40,
+                    help='sentence embedding squash size')
+
 parser.add_argument('--lr', type=float, default=0.05,
                     help='initial learning rate')
 parser.add_argument('--clip', type=float, default=0.25,
                     help='gradient clipping')
-parser.add_argument('--noise_stdev', type=float, default=0.05,
+parser.add_argument('--noise_stdev', type=float, default=1.0,
                     help='noise distribution standard deviation')
-parser.add_argument('--sloss_factor', type=float, default=0.1,
-                    help='supplemental loss scaling')
+
+# D-loss (distance loss) tuning parameters
 parser.add_argument('--dloss_factor', type=float, default=1.0,
                     help='distance loss scaling')
 parser.add_argument('--dloss_shift', type=int, default=4,
                     help='when should dloss gating reach 0.5')
+parser.add_argument('--dloss_slope', type=float, default=1.0,
+                    help='how quickly dloss goes from 0...1')
+
+# S-loss (supplemental loss) tuning parameters
+parser.add_argument('--sloss_factor', type=float, default=0.1,
+                    help='supplemental loss scaling')
 parser.add_argument('--sloss_shift', type=int, default=4,
                     help='when should sloss gating reach 0.5')
 parser.add_argument('--sloss_slope', type=float, default=1.0,
                     help='when should sloss gating reach 0.5')
-parser.add_argument('--dloss_slope', type=float, default=1.0,
-                    help='how quickly dloss goes from 0...1')
-parser.add_argument('--embinit', type=str, default='random',
-                    help='embedding weight initialization type')
-parser.add_argument('--squash_size', type=int, default=40,
-                    help='sentence embedding squash size')
+
+# K-loss (KL-divergence loss, VAE) tuning parameters
+parser.add_argument('--kloss_factor', type=float, default=1.0,
+                    help='supplemental loss scaling')
+parser.add_argument('--kloss_shift', type=int, default=10,
+                    help='when should kloss gating reach 0.5')
+parser.add_argument('--kloss_slope', type=float, default=1.0,
+                    help='when should kloss gating reach 0.5')
+
 parser.add_argument('--seed_size', type=int, default=10,
                     help='batch generation: how many seed clusters per batch')
 parser.add_argument('--take_clusters', type=int, default=10,
@@ -81,8 +95,6 @@ parser.add_argument('--weight_decay', type=float, default=0.0,
                     help='optimizer weight decay')
 parser.add_argument('--vocabsize', type=int, default=20000,
                     help='how many words to get from glove')
-parser.add_argument('--optimizer', action='store_true',
-                    help='use ADAM optimizer')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
 parser.add_argument('--debug', action='store_true',
@@ -101,10 +113,9 @@ def logistic(slope, shift, x):
     gate0 = slope * (x - shift)
     return 1.0 / (1.0 + math.exp(-gate0))
 
-def scheduler(config):
+def scheduler(slope, shift):
     '''Creates a "sigmoid scheduler", a sequence of values that follow a
     scaled and shifted sigmoid function.'''
-    slope, shift = config
     return (logistic(slope, shift, x) for x in itertools.count())
 
 def cache(x, batchsize=250):
@@ -264,6 +275,9 @@ def main():
     valid_loader = generate_valid(args, data)
     noiser = noise(args)
     supplement_loader = None
+    dloss_schedule = scheduler(args.dloss_slope, args.dloss_shift)
+    sloss_schedule = scheduler(args.sloss_slope, args.sloss_shift)
+    kloss_schedule = scheduler(args.kloss_slope, args.kloss_shift)
     if data.questions_supplement is not None:
         supplement_loader = generate_supplement(args, data)
 
@@ -275,12 +289,11 @@ def main():
             first_batch = True
             print('Precomputing batches')
             cur_batches = cache(batches) # Precompute the batch.
-            dloss_gate = logistic(args.dloss_slope, args.dloss_shift, eid)
-            dloss_factor = args.dloss_factor * dloss_gate
-            sloss_factor = args.sloss_factor * logistic(
-                args.dloss_slope, args.sloss_shift, eid)
-            print('Epoch {} start, dloss_factor = {:.6f}, sloss_factor={:.6f}'.\
-                    format(eid, dloss_factor, sloss_factor))
+            dloss_factor = next(dloss_schedule)
+            sloss_factor = next(sloss_schedule)
+            kloss_factor = next(kloss_schedule)
+            print('Epoch {} start, dloss*={:.6f}, sloss*={:.6f}, kloss*={:.6f}'.\
+                    format(eid, dloss_factor, sloss_factor, kloss_factor))
             batchcount = 0
             for ind, (input, duplicate_matrix) in enumerate(cur_batches):
                 batchcount = ind + 1
@@ -298,7 +311,7 @@ def main():
                 dloss, separation = distance_loss(
                         log_prob, Variable(duplicate_matrix))
                 kl = kl_div_with_std_norm(mean, logvar)
-                loss = rloss + dloss_factor * dloss + kl_factor * kl
+                loss = rloss + dloss_factor * dloss + kloss_factor * kl
 
                 sloss = 0.0
                 if supplement_loader is not None:
@@ -308,7 +321,7 @@ def main():
                     sloss = bsz * reconstruction_loss(
                             auto_s.view(-1, args.vocabsize), supp.view(-1))
                     kl_s = kl_div_with_std_norm(mean, logvar)
-                    loss = loss + sloss_factor * (sloss + kl_factor * kl_s)
+                    loss = loss + sloss_factor * (sloss + kloss_factor * kl_s)
 
                 if first_batch:
                     #print(input)
