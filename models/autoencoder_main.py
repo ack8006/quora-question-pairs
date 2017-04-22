@@ -180,7 +180,8 @@ def distance_loss(log_prob, duplicate_matrix):
     '''Args:
         log_prob: B*B sized array of log probabilities.
         duplicate_matrix: B*B array of is_duplicates.'''
-    prob, duplicate_matrix, non_duplicate_matrix = normalize(log_prob)
+    prob, duplicate_matrix, non_duplicate_matrix = \
+        normalize(log_prob, duplicate_matrix)
 
     pd = prob * duplicate_matrix
     # Set to 1 all cells that aren't probability of duplicate so we can
@@ -201,10 +202,8 @@ def measure(log_prob, duplicate_matrix):
     has_dup = duplicate_matrix.sum(dim=1).gt(0)
     log_prob = log_prob[has_dup].transpose(0, 1)[has_dup].transpose(0, 1)
     duplicate_matrix = duplicate_matrix[has_dup].transpose(0, 1)[has_dup].transpose(0, 1)
-    prob, duplicate_matrix, non_duplicate_matrix = normalize(log_prob)
-
-    B = duplicate_matrix.size(0)
-    my_eye = Variable(eye[:B, :B])
+    prob, duplicate_matrix, non_duplicate_matrix = \
+        normalize(log_prob, duplicate_matrix)
 
     predict_duplicate = prob > 0.5
     predict_non_duplicate = prob < 0.5
