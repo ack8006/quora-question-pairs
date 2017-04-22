@@ -1,9 +1,9 @@
 #!/bin/bash
 CMD="python autoencoder_main.py \
 	--vocabsize 10000 \
-	--max_sentences 25000  \
+	--max_sentences 50000  \
         --supplement ../data/supplemental.csv \
-	--max_supplement 7000  \
+	--max_supplement 27000  \
 	--lr 0.001 \
 	--din 30 \
 	--dhid 50 \
@@ -23,7 +23,6 @@ CMD="python autoencoder_main.py \
 	--loginterval 20 \
 	--kloss_shift 10 \
 	--seed_size 10 \
-        --debug \
 	--save_to weight_decay_5.pt"
 
 cat do_test.sh

@@ -99,7 +99,11 @@ class Data:
         return ' '.join(self.glove.lookup[w] for w in list(ids))
 
     def sample_str(self, log_probs):
-        return self.to_str(torch.multinomial(log_probs.exp(), 1))
+        # Greedy decoding
+        chosen = log_probs.max(dim=1)[1].squeeze()
+        # print(chosen)
+        # print(chosen.size())
+        return self.to_str(chosen)
 
 
 

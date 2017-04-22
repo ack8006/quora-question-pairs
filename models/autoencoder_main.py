@@ -409,14 +409,17 @@ def main():
                 [true_positives, false_negatives],
                 [false_positives, true_negatives]
                 ])
+            print('Validation confusion matrix:')
             print(confusion_matrix)
 
             print('Average loss: {:.6f} | Valid dloss: {:.6f} | Valid sep: {:.6f}'
                     .format(total_cost / batchcount, np.mean(tvdloss), np.mean(tvseparation)))
             np.random.shuffle(sentences)
+            # Print a few sentences and their reconstructions
+            print('Some reconstructions:')
             for orig, reconst in sentences[:3]:
                 print('  ' + cut(orig))
-                print('  => ' + cut(reconst))
+                print('    => ' + cut(reconst))
             print('-' * 110)
             with open(args.save_to, 'wb') as f:
                 torch.save(model, f)
