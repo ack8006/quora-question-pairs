@@ -96,7 +96,7 @@ class Data:
 
     def to_str(self, ids):
         '''ids: LongTensor'''
-        return ' '.join(self.glove.lookup[w] for w in ids)
+        return ' '.join(self.glove.lookup[w] for w in list(ids))
 
     def sample_str(self, log_probs):
         return self.to_str(torch.multinomial(log_probs.exp(), 1))

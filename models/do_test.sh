@@ -1,7 +1,7 @@
 #!/bin/bash
 CMD="python autoencoder_main.py \
 	--vocabsize 10000 \
-	--max_sentences 45000  \
+	--max_sentences 25000  \
         --supplement ../data/supplemental.csv \
 	--max_supplement 7000  \
 	--lr 0.001 \

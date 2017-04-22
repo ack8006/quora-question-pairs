@@ -3,6 +3,7 @@ from __future__ import print_function
 import sys
 
 import argparse
+import random
 import itertools
 import time
 import math
@@ -186,31 +187,32 @@ def normalize(log_prob, duplicate_matrix):
     non_duplicate_matrix = (1 - duplicate_matrix) - my_eye
 
     # Calculate dist from logprob
-    prob = log_prob.exp() + 1e-8
-    prob = prob - (my_eye * prob)
-    prob = prob / prob.sum(dim=1).repeat(1, B)
-    return prob, duplicate_matrix, non_duplicate_matrix
+    sumexp = log_prob.exp() + 1e-8
+    sumexp = sumexp - (my_eye * sumexp)
+    logsumexp = sumexp.sum(dim=1).log()
+    log_prob = log_prob - logsumexp.repeat(1, B)
+    return log_prob, duplicate_matrix, non_duplicate_matrix
 
 def distance_loss(log_prob, duplicate_matrix):
     '''Args:
         log_prob: B*B sized array of log probabilities.
         duplicate_matrix: B*B array of is_duplicates.'''
-    prob, duplicate_matrix, non_duplicate_matrix = \
+    log_prob, duplicate_matrix, non_duplicate_matrix = \
         normalize(log_prob, duplicate_matrix)
 
-    pd = prob * duplicate_matrix
-    # Set to 1 all cells that aren't probability of duplicate so we can
-    # take the min value.
-    probability_dup = pd + (1 - duplicate_matrix)
-    probability_non = prob * non_duplicate_matrix
-
+    # When mask matrix is multiplied before exponentiating, the '0' becomes '1',
+    # so finding the minimum is easy. Vice versa for finding max.
     has_dup = duplicate_matrix.sum(dim=1).gt(0)
-    min_dup = probability_dup.min(dim=1)[0][has_dup]
-    max_dup = pd.max(dim=1)[0][has_dup]
-    max_non = probability_non.max(dim=1)[0][has_dup]
+    min_dup = (log_prob * duplicate_matrix).min(dim=1)[0].exp()[has_dup]
+    max_non = (log_prob.exp() * non_duplicate_matrix).max(dim=1)[0][has_dup]
+    max_dup = (log_prob.exp() * duplicate_matrix).max(dim=1)[0][has_dup]
+    #print(torch.stack([max_dup, min_dup, max_non], 1))
 
     # Gap loss between lest likely duplicate and most likely non-duplicate.
-    return (1 + max_non - min_dup).mean(), (max_dup - max_non).mean()
+    gap = 1 + max_non - min_dup
+    separation = max_dup - max_non
+    #print(torch.stack([gap, separation], 1))
+    return gap.mean(), separation.mean()
 
 def measure(log_prob, duplicate_matrix, dups, nondups):
     B = log_prob.size(0)
@@ -240,6 +242,12 @@ def noise(args):
     # GN: function that takes a size and returns a noise vector with the given
     # stdev, from a batch.
     return generate_noise
+
+
+def cut(string):
+    if len(string) > 100:
+        return string[:97] + '...'
+    return string
 
 
 def main():
@@ -376,13 +384,13 @@ def main():
                     break
                 input = Variable(input)
                 idx = random.randint(0, len(input) - 1) # which sentence?
-                orig_str = data.to_str(input[idx])
+                orig_str = data.to_str(input[idx].data)
 
                 # Run on validation set.
                 if args.cuda and not input.is_cuda:
                     input = input.cuda()
                 auto, mean_s, logvar_v, log_prob = model(input, noiser)
-                reconstruction = data.sample_str(log_prob[idx])
+                reconstruction = data.sample_str(log_prob[idx].data)
                 vdloss, vseparation =\
                         distance_loss(log_prob, Variable(duplicate_matrix))
                 measure(log_prob, duplicate_matrix, dups, nondups)
@@ -407,8 +415,8 @@ def main():
                     .format(total_cost / batchcount, np.mean(tvdloss), np.mean(tvseparation)))
             np.random.shuffle(sentences)
             for orig, reconst in sentences[:3]:
-                print('  ' + orig)
-                print('  => ' + reconst)
+                print('  ' + cut(orig))
+                print('  => ' + cut(reconst))
             print('-' * 110)
             with open(args.save_to, 'wb') as f:
                 torch.save(model, f)
