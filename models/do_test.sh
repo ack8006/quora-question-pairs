@@ -19,8 +19,10 @@ CMD="python autoencoder_main.py \
 	--dloss_factor 1.0 \
 	--dloss_slope 1 \
 	--dloss_shift 5 \
+	--kloss_factor 1.0 \
+	--kloss_slope 1 \
+	--kloss_shift 10 \
 	--seed_size 15 \
-	--optimizer \
         --debug \
 	--save_to weight_decay_5.pt"
 

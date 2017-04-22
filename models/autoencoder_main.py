@@ -267,9 +267,12 @@ def main():
 
     # Decaying average stats.
     recent_rloss = 0
+    recent_kl = 0
     recent_dloss = 0
     recent_sloss = 0
+    recent_kls = 0
     recent_sep = 0
+    add_to_average = lambda r, v: 0.9 * r + 0.1 * v
 
     train_loader = generate_train(args, data)
     valid_loader = generate_valid(args, data)
@@ -310,45 +313,55 @@ def main():
                         auto.view(-1, args.vocabsize), input.view(-1))
                 dloss, separation = distance_loss(
                         log_prob, Variable(duplicate_matrix))
-                kl = kl_div_with_std_norm(mean, logvar)
-                loss = rloss + dloss_factor * dloss + kloss_factor * kl
+                kl = kl_div_with_std_norm(mean, logvar).mean()
 
                 sloss = 0.0
+                kl_s = 0.0
                 if supplement_loader is not None:
                     # Supplemental loss.
                     supp = Variable(next(supplement_loader))
                     auto_s, mean_s, logvar_s, _ = model(supp, noiser, False)
                     sloss = bsz * reconstruction_loss(
                             auto_s.view(-1, args.vocabsize), supp.view(-1))
-                    kl_s = kl_div_with_std_norm(mean, logvar)
-                    loss = loss + sloss_factor * (sloss + kloss_factor * kl_s)
+                    kl_s = kl_div_with_std_norm(mean, logvar).mean()
 
-                if first_batch:
-                    #print(input)
-                    #print(duplicate_matrix)
-                    #print(prob)
+                if args.debug and first_batch:
+                    print(input)
+                    print(duplicate_matrix)
+                    print(log_prob)
                     first_batch = False
+
+                # Assemble the complete loss function.
+                loss = rloss + kloss_factor * kl
+                loss += sloss_factor * (sloss + kloss_factor * kl)
+                loss += dloss_factor * dloss
 
                 loss.backward()
                 clip_grad_norm(model.parameters(), args.clip)
                 optimizer.step()
 
                 total_cost += loss.data[0]
-                recent_rloss = 0.9 * recent_rloss + 0.1 * rloss.data[0]
-                recent_dloss = 0.9 * recent_dloss + 0.1 * dloss.data[0]
-                recent_sloss = 0.9 * recent_sloss + 0.1 * sloss.data[0]
-                recent_sep = 0.9 * recent_sep + 0.1 * separation.data[0]
+                recent_rloss = add_to_average(recent_rloss, rloss.data[0])
+                recent_kl = add_to_average(recent_kl, kl.data[0])
+                recent_sloss = add_to_average(recent_sloss, sloss.data[0])
+                recent_kl_s = add_to_average(recent_kl_s, kl_s.data[0])
+                recent_dloss = add_to_average(recent_dloss, dloss.data[0])
+                recent_sep = add_to_average(recent_sep, separation.data[0])
 
                 #if ind > 100:
                     #return  # for testing only
                 if ind % args.loginterval == 0 and ind > 0:
                     cur_loss = total_cost / (ind * args.batchsize)
                     elapsed = time.time() - start_time
+                    # Each 0.1234/0.7356 loss is reconstruction/kl-div
                     print('Epoch {} | {:5d}/{} Batches | ms/batch {:5.2f} | '
-                            'losses r{:.6f} s{:.6f} d{:.6f} (sep {:.6f})'.format(
+                            'losses r{:.6f}/{:.6f} s{:.6f}/{:.6f} '
+                            'd{:.6f} (sep {:.6f})'.format(
                                 eid, ind, args.batches,
                                 elapsed * 1000.0 / args.loginterval,
-                                recent_rloss, recent_sloss, recent_dloss, recent_sep))
+                                recent_rloss, recent_kl,
+                                recent_sloss, recent_kl_s,
+                                recent_dloss, recent_sep))
 
             # Run model on validation set.
             model.eval()

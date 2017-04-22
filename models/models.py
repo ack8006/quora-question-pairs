@@ -183,12 +183,15 @@ class EmbeddingAutoencoder(nn.Module):
         encoder_dim = self.bilstm_encoder.lstm.hidden_size \
                 * 2 * self.bilstm_decoder.lstm.num_layers
         self.fc_mean = FC(encoder_dim, embed_size, 0.0)
-        self.fc_std = FC(encoder_dim, embed_size, 0.0)
-        self.fc_expand = FC(embed_size, encoder_dim, 0.0)
+        self.fc_logvar = FC(encoder_dim, embed_size, 0.0)
+        self.fc_expand = FC(embed_size, encoder_dim, dropout)
 
         self.fc_decoder = FC(self.bilstm_decoder.lstm.hidden_size * 2,
                 self.word_embedding.num_embeddings, dropout)
         self.batchnorm = nn.BatchNorm1d(
+                2 * self.bilstm_encoder.lstm.num_layers *
+                self.bilstm_encoder.lstm.hidden_size)
+        self.bn_expand = nn.BatchNorm1d(
                 2 * self.bilstm_encoder.lstm.num_layers *
                 self.bilstm_encoder.lstm.hidden_size)
         self.batchnorm_decode = nn.BatchNorm1d(
@@ -214,11 +217,11 @@ class EmbeddingAutoencoder(nn.Module):
         assert self.bilstm_encoder.lstm.batch_first
         assert self.bilstm_decoder.lstm.batch_first
 
-    def encoder(self, X, noise=None):
+    def encoder(self, X):
         '''Run X through the encoder part. Args:
             X: B x Seq_Len x D word embeddings
         Returns:
-            hid: 2N x B x D encoded sentence for each batch.'''
+            hn: B x 2ND encoded sentence for each batch.'''
         h0 = self.init_hidden(X.size(0), self.bilstm_encoder.lstm)
         _, hid, _ = self.bilstm_encoder(X, h0) # Want only the hidden states.
 
@@ -226,20 +229,22 @@ class EmbeddingAutoencoder(nn.Module):
         hn = hid.transpose(0, 1).contiguous().\
             view(hid.size(1), hid.size(0) * hid.size(2)) # b x 2nd
         hn = self.batchnorm(hn)
-        hid = hn.view(hid.size(1), hid.size(0), hid.size(2)).transpose(1, 0)
-        if noise:
-            hid = hid + noise(hid.size())
-        return hid
+        return hn
 
-    def decoder(self, h, X):
+    def decoder(self, expand, X):
         '''Run X through the decoder part. Args:
             h0: 2N x B x D hidden states from encoder.
             X: B x Seq_Len x D word embeddings of the correct answer.
         Returns:
             output: B x Seq_Len X D output class probabilities.'''
+        # B x 2ND -> 2N x B x D
+        n = self.bilstm_decoder.lstm.num_layers
+        d = self.bilstm_decoder.lstm.input_size
+        h1_noised = expand.view(-1, 2 * n, d).transpose(1, 0)
+
         # B x S x 2D
         h0 = self.init_hidden(X.size(0), self.bilstm_decoder.lstm)
-        h0 = (h, h0[1])
+        h0 = (h1_noised, h0[1])
         out, _, _ = self.bilstm_decoder(X, h0)
 
         # S (B x 2D)
@@ -257,7 +262,6 @@ class EmbeddingAutoencoder(nn.Module):
             log_probs: B x B matrix. Cell (i, j) is (unnormalized) log p(j|i)
                   according to some likelihood function on pairs of data points.'''
         B = emb.size(0)
-        emb = self.fc_embedding(emb)
         log_probs = Variable(torch.FloatTensor(B, B))
         if emb.is_cuda:
             log_probs = log_probs.cuda()
@@ -278,17 +282,16 @@ class EmbeddingAutoencoder(nn.Module):
             prob: pairwise probabilities between X1 and X2 FloatTensor Variable
                   of size B x B'''
         X1 = self.drop(self.word_embedding(X1))
-        h1 = self.encoder(X1, noise)
+        hn = self.encoder(X1) # B x 2ND
+        print(hn.size())
 
         # Compute variational sample
-        h1t = h1.transpose(0, 1)
-        flat = h1t.view(h1.size(0), -1)
-        mean = self.fc_mean(flat)
-        logvar = self.fc_logvar(flat)
+        mean = self.fc_mean(hn)
+        logvar = self.fc_logvar(hn)
         emb1 = noise(mean.size()) * (logvar / 2).exp() + mean
-        h1_noised = emb1.view(h1t.size()).transpose(1, 0)
+        expand = self.bn_expand(self.fc_expand(emb1))
 
-        auto_X1 = self.decoder(h1_noised, X1)
+        auto_X1 = self.decoder(expand, X1)
         prob = None
         if calculate_dist:
             prob = self.pair_log_probabilities(emb1)
