@@ -8,8 +8,10 @@ import data
 import numpy as np
 import torch
 import itertools
+import re
 
 nlp = spacy.load('en', parser=False)
+strip_padding = re.compile('(?: <pad>)+ *$')
 
 def load_data(args, path, glove, limit=1000000):
     '''Load a csv file containing (qid, question) rows'''
@@ -96,7 +98,9 @@ class Data:
 
     def to_str(self, ids):
         '''ids: LongTensor'''
-        return ' '.join(self.glove.lookup[w] for w in list(ids))
+        # Convert to string and strip trailing padding.
+        return strip_padding.sub('',
+                ' '.join(self.glove.lookup[w] for w in list(ids)))
 
     def sample_str(self, log_probs):
         # Greedy decoding
