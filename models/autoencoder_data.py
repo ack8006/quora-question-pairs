@@ -89,7 +89,7 @@ class Data:
         # Get clusters for train and valid
         self.train_clusters = filter_clusters(self.qid_train, json.load(
                 open(f('train_clusters.json')))['clusters'])
-        self.valid_clusters = filter_clusters(json.load(
+        self.valid_clusters = filter_clusters(self.qid_valid, json.load(
                 open(f('valid_clusters.json')))['clusters'])
 
 
