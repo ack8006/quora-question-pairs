@@ -38,7 +38,7 @@ def iterate_epoch(clusters, args):
     for idx in xrange(0, len(clusters), seed_max): # Seed size
         # Get a selection of duplicates as the seed.
         batch = []
-        for cluster in clusters[:seed_max]:
+        for cluster in clusters[idx:(idx + seed_max)]:
             np.random.shuffle(cluster)
             batch.extend(cluster[:take_max])
             if len(batch) > batch_max:
@@ -64,10 +64,11 @@ def iterate_epoch(clusters, args):
                 mtx[i,j] = (q1, q2) in dupset
 
         # Print the proportion of duplicate pairs in batch.
-        if args.debug and idx % 50 == 0:
+        if args.debug and idx % 100 == 0:
             assert batch_max == len(batch)
             prop_dup = mtx.sum() * 1.0 / (batch_max * (batch_max - 1))
             print('batch duplicates: {0:.5f}'.format(prop_dup))
+            print(batch[:15])
 
         # Yield question ids, duplicate matrix
         batch = torch.LongTensor(batch)
