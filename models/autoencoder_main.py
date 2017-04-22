@@ -206,6 +206,7 @@ def distance_loss(log_prob, duplicate_matrix):
     min_dup = (log_prob * duplicate_matrix).min(dim=1)[0].exp()[has_dup]
     max_non = (log_prob.exp() * non_duplicate_matrix).max(dim=1)[0][has_dup]
     max_dup = (log_prob.exp() * duplicate_matrix).max(dim=1)[0][has_dup]
+    #print(max_dup - min_dup)
     #print(torch.stack([max_dup, min_dup, max_non], 1))
 
     # Gap loss between lest likely duplicate and most likely non-duplicate.
