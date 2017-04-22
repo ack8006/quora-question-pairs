@@ -199,6 +199,15 @@ def distance_loss(log_prob, duplicate_matrix):
     # Gap loss between lest likely duplicate and most likely non-duplicate.
     return (1 + max_non - min_dup).mean(), (max_dup - max_non).mean()
 
+def measure(log_prob, duplicate_matrix, dups, nondups):
+    B = log_prob.size(0)
+    for i in range(B):
+        for j in range(i+1,B):
+            if duplicate_matrix[i, j]:
+                dups.append(log_prob[i, j])
+            else:
+                nondups.append(log_prob[i, j])
+
 
 def noise(args):
     stdev = args.noise_stdev
@@ -332,6 +341,8 @@ def main():
             model.eval()
             tvdloss = []
             tvseparation = []
+            dups = []
+            nondups = []
             for ind, (input, duplicate_matrix) in enumerate(valids):
                 if ind > args.valid_batches:
                     break
@@ -344,8 +355,22 @@ def main():
                     model(input, noise(args), None)
                 vdloss, vseparation =\
                         distance_loss(log_prob, Variable(duplicate_matrix))
+                measure(log_prob, duplicate_matrix, dups, nondups)
                 tvdloss.append(vdloss.data[0])
                 tvseparation.append(vseparation.data[0])
+            dups = np.array(dups)
+            nondups = np.array(nondups)
+            threshold = (min(dups) + max(nondups)) / 2
+
+            true_positives = sum(dups > threshold)
+            false_positives = sum(nondups > threshold)
+            true_negatives = sum(nondups <= threshold)
+            false_negatives = sum(dups <= threshold)
+            confusion_matrix = np.array([
+                [true_positives, false_negatives],
+                [false_positives, true_negatives]
+                ])
+            print(confusion_matrix)
 
             print('Average loss: {:.6f} | Valid dloss: {:.6f} | Valid sep: {:.6f}'
                     .format(total_cost / batchcount, np.mean(tvdloss), np.mean(tvseparation)))
