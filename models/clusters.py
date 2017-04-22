@@ -66,7 +66,7 @@ def iterate_epoch(clusters, args):
         # Print the proportion of duplicate pairs in batch.
         if args.debug and idx % 50 == 0:
             assert batch_max == len(batch)
-            prop_dup = mtx.sum() / (batch_max * (batch_max - 1))
+            prop_dup = mtx.sum() * 1.0 / (batch_max * (batch_max - 1))
             print('batch duplicates: {0:.5f}'.format(prop_dup))
 
         # Yield question ids, duplicate matrix
