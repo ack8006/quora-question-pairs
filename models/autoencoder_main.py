@@ -342,8 +342,8 @@ def main():
                     model(input, noise(args), None)
                 vdloss, vseparation =\
                         distance_loss(log_prob, Variable(duplicate_matrix))
-                tvdloss.append(vdloss)
-                tvseparation.append(vseparation)
+                tvdloss.append(vdloss.data[0])
+                tvseparation.append(vseparation.data[0])
 
             print('Average loss: {:.6f} | Valid dloss: {:.6f} | Valid sep: {:.6f}'
                     .format(total_cost / batchcount, np.mean(tvdloss), np.mean(tvseparation)))
