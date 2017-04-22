@@ -73,6 +73,8 @@ parser.add_argument('--epochs', type=int, default=2,
                     help='epochs to train against.')
 parser.add_argument('--batchsize', type=int, default=25, metavar='N',
                     help='batch size')
+parser.add_argument('--valid_batches', type=int, default=50,
+                    help='number of validation set batches')
 parser.add_argument('--batches', type=int, default=300,
                     help='max batches in an epoch')
 parser.add_argument('--weight_decay', type=float, default=0.0,
@@ -331,7 +333,7 @@ def main():
             tvdloss = []
             tvseparation = []
             for ind, (input, duplicate_matrix) in enumerate(valids):
-                if ind > 50:
+                if ind > args.valid_batches:
                     break
                 input = Variable(input)
 
