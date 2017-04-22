@@ -5,6 +5,8 @@ import os
 import spacy
 import json
 import data
+import numpy as np
+import torch
 
 nlp = spacy.load('en', parser=False)
 
@@ -61,15 +63,23 @@ class Data:
                 f('glove.6B.{0}d.txt'.format(args.demb)),
                 max_words=args.vocabsize))
 
+        print('fetching train')
         self.qid_train, self.questions_train = \
-                load_data(args, f('questions_train.csv'))
+                load_data(args, f('questions_train.csv'), self.glove, args.max_sentences)
+        print('fetching valid')
         self.qid_valid, self.questions_valid = \
-                load_data(args, f('questions_valid.csv'))
+                load_data(args, f('questions_valid.csv'), self.glove, args.max_sentences)
         if args.supplement is not None:
+            print('fetching unsupervised')
             self.qid_supplement, self.questions_supplement = \
-                    load_data(args, f('questions_supplement.csv'))
+                    load_data(args, f('questions_supplement.csv'), self.glove, args.max_supplement)
         else:
             self.qid_supplement, self.questions_supplement = None, None
+
+        # Get clusters for train and valid
+        self.train_clusters = json.load(open(f('train_clusters.json')))
+        self.valid_clusters = json.load(open(f('valid_clusters.json')))
+        self.dupset clusters.read_dupset(f('all_duplicates.tsv'))
 
 
 

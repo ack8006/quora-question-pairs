@@ -2,30 +2,15 @@ import json
 import numpy as np
 import torch
 import itertools
+import random
 
-train_clusters = json.load(open('../data/train_clusters.json'))
-valid_clusters = json.load(open('../data/valid_clusters.json'))
-dupset, filler_base = read_dupset()
-
-def iterate_filler():
-    while True:
-        np.random.shuffle(filler_base)
-        for f in filler_base:
-            yield f
-
-filler_questions = iterate_filler()
-
-def read_dupset():
-    frame = pd.read_csv('../data/all_questions.tsv', delimiter='\t',
-            index_col=None, header=None)
+def read_dupset(path):
+    frame = pd.read_csv(path, delimiter='\t', index_col=None, header=None)
     dups = []
-    qids = []
     for row in frame.itertuples():
-        dups.append(row[0], row[1])
-        dups.append(row[1], row[0])
-        qids.append(row[0])
-        qids.append(row[1])
-    return set(dups), set(qids)
+        dups.append((row[0], row[1]))
+        dups.append((row[1], row[0]))
+    return set(dups)
 
 def iterate_epoch(clusters, seed_max=10, take_max=10, batch_max=80):
     np.random.shuffle(clusters)
@@ -40,10 +25,11 @@ def iterate_epoch(clusters, seed_max=10, take_max=10, batch_max=80):
         np.random.shuffle(batch)
         batch = batch[:batch_max]
 
-        # Consult filler.
+        # If we're short of examples, just take one from any cluster.
         check = {qid: i for i, qid in enumerate(batch)}
         while len(batch) < batch_max:
-            qid = next(filler_questions)
+            cluster = random.choice(clusters)
+            qid = random.choice(cluster)
             if qid not in check:
                 check[qid] = len(batch)
                 batch.append(qid)

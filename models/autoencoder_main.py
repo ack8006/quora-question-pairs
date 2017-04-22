@@ -74,6 +74,9 @@ def generate(args, data, clusters_list):
         yield batch()
 
 
+eye = torch.eye(200)
+if args.cuda:
+    eye = eye.cuda()
 def distance_loss(log_prob, duplicate_matrix, eye):
     '''Args:
         log_prob: B*B sized array of log probabilities.
@@ -102,7 +105,7 @@ def distance_loss(log_prob, duplicate_matrix, eye):
     max_dup = pd.max(dim=1)[0][has_dup]
     max_non = probability_non.max(dim=1)[0][has_dup]
 
-    # Hinge loss between lest likely duplicate and most likely non-duplicate.
+    # Gap loss between lest likely duplicate and most likely non-duplicate.
     return (1 + max_non - min_dup).mean(), (max_dup - max_non).mean()
 
 
@@ -195,14 +198,7 @@ def main():
     args = parser.parse_args()
 
     data = Data(args)
-    train_loader = generate(args, qid, questions)
-
-    supplement_loader = None
-    if args.supplement is not None:
-        sid, supplement = load_data(args, args.supplement, glove, args.max_supplement)
-        supplement_loader = cache(generate_supplement(args, supplement))
-
-    embedding = glove.module
+    embedding = data.glove.module
     bilstm_encoder = BiLSTM(args.demb, args.dhid, args.nlayers, args.dropout)
     bilstm_decoder = BiLSTM(args.demb, args.dhid, args.nlayers, args.dropout)
     emb_dropout = 0.0
@@ -220,13 +216,13 @@ def main():
     # Input: B x W LongTensor
     # Duplicate_matrix: B x B ByteTensor
     print('Starting.')
+
+    # Decaying average stats.
     recent_rloss = 0
     recent_dloss = 0
     recent_sloss = 0
     recent_sep = 0
-    eye = torch.eye(200)
-    if args.cuda:
-        eye = eye.cuda()
+
     try:
         for (eid, batches) in enumerate(train_loader):
             model.train()
