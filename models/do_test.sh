@@ -22,7 +22,7 @@ CMD="python autoencoder_main.py \
 	--kloss_slope 1 \
 	--kloss_shift 7 \
 	--loginterval 20 \
-	--word_dropout 0.3 \
+	--word_dropout 0.5 \
 	--seed_size 10 \
 	--debug \
 	--save_to debug.pt"
