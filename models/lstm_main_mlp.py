@@ -179,6 +179,7 @@ def main():
     print(model_config)
 
     best_val_acc = 0.78
+    best_ll = 0.5
     for epoch in range(args.epochs):
         model.train()
         total_cost = 0
@@ -218,14 +219,15 @@ def main():
 
         train_acc, train_ll = evaluate(model, train_loader, args.cuda)
         val_acc, val_ll = evaluate(model, valid_loader, args.cuda)
-        if args.save and (val_acc > best_val_acc):
+        # if args.save and (val_acc > best_val_acc):
+        if args.save and (val_ll < best_ll):
             with open(args.save + '_corpus.pkl', 'wb') as corp_f:
                 pkl.dump(corpus, corp_f, protocol=pkl.HIGHEST_PROTOCOL)
             torch.save(model.cpu(), args.save)
             torch.save(model.cpu().state_dict(), args.save + ".state_dict")
             with open(args.save + ".state_dict.config", "w") as f:
                 f.write(model_config)
-            best_val_acc = val_acc
+            best_ll = val_ll
             if args.cuda:
                 model.cuda()
 

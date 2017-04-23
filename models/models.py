@@ -224,7 +224,6 @@ class LSTMModelMLP(nn.Module):
 
         #Concatenates Hidden State Directions and Layers
         hid1 = torch.cat(torch.chunk(hid1, hid1.size()[0]), 2)[0]
-        print(hid1.size())
         hid2 = torch.cat(torch.chunk(hid2, hid2.size()[0]), 2)[0]
 
         #Concatenates Question Hidden States Together
