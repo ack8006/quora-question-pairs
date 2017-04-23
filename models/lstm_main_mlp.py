@@ -54,8 +54,8 @@ def evaluate(model, data_loader, cuda):
             duplicate = duplicate.cuda()
         correct += (pred == duplicate).sum()
         total += len(pred)
-        pred_list += list(soft_max(out)[:, 1].data.numpy())
-        true_list += list(duplicate.numpy())
+        pred_list += list(soft_max(out)[:, 1].data.cpu().numpy())
+        true_list += list(duplicate.cpu().numpy())
     return (correct / total), log_loss(true_list, pred_list, eps=1e-7)
 
 
