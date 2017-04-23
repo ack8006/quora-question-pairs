@@ -114,10 +114,10 @@ def logistic(slope, shift, x):
     gate0 = slope * (x - shift)
     return 1.0 / (1.0 + math.exp(-gate0))
 
-def scheduler(slope, shift):
+def scheduler(slope, shift, factor):
     '''Creates a "sigmoid scheduler", a sequence of values that follow a
     scaled and shifted sigmoid function.'''
-    return (logistic(slope, shift, x) for x in itertools.count())
+    return (factor * logistic(slope, shift, x) for x in itertools.count())
 
 def cache(x, batchsize=250):
     '''Given an iterator, precompute some of its entries.'''
@@ -285,9 +285,9 @@ def main():
     valid_loader = generate_valid(args, data)
     noiser = noise(args)
     supplement_loader = None
-    dloss_schedule = scheduler(args.dloss_slope, args.dloss_shift)
-    sloss_schedule = scheduler(args.sloss_slope, args.sloss_shift)
-    kloss_schedule = scheduler(args.kloss_slope, args.kloss_shift)
+    dloss_schedule = scheduler(args.dloss_slope, args.dloss_shift, args.dloss_factor)
+    sloss_schedule = scheduler(args.sloss_slope, args.sloss_shift, args.sloss_factor)
+    kloss_schedule = scheduler(args.kloss_slope, args.kloss_shift, args.kloss_factor)
     if data.questions_supplement is not None:
         supplement_loader = generate_supplement(args, data)
 

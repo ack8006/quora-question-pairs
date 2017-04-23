@@ -12,7 +12,7 @@ CMD="python autoencoder_main.py \
 	--dropout 0.5 \
 	--nlayers 1 \
 	--squash_size 100 \
-	--sloss_factor 0.3 \
+	--sloss_factor 1.0 \
 	--sloss_slope 0.6 \
 	--sloss_shift 5 \
 	--dloss_factor 1.5 \
