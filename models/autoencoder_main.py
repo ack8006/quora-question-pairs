@@ -70,6 +70,8 @@ parser.add_argument('--kloss_shift', type=int, default=10,
                     help='when should kloss gating reach 0.5')
 parser.add_argument('--kloss_slope', type=float, default=1.0,
                     help='when should kloss gating reach 0.5')
+parser.add_argument('--kloss_start', type=int, default=0,
+                    help='when should the model start optimizing against k-loss')
 
 # Training parameters.
 parser.add_argument('--lr', type=float, default=0.05,
@@ -327,6 +329,10 @@ def main():
                 dloss_factor = next(dloss_schedule)
                 sloss_factor = next(sloss_schedule)
                 kloss_factor = next(kloss_schedule)
+                if total_batchcount < args.kloss_start:
+                    kloss_factor = 0.0
+                elif total_batchcount == args.kloss_start:
+                    print('Start optimizing kl-div at:', kloss_factor)
 
                 batchcount = ind + 1
                 total_batchcount += 1
