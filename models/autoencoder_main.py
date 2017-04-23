@@ -216,6 +216,7 @@ def distance_loss(log_prob, duplicate_matrix):
     return gap.mean(), separation.mean()
 
 def measure(log_prob, duplicate_matrix, dups, nondups):
+    '''Return the un-normalized log probabilities'''
     B = log_prob.size(0)
     for i in range(B):
         for j in range(i+1,B):
@@ -399,8 +400,8 @@ def main():
                 tvdloss.append(vdloss.data[0])
                 tvseparation.append(vseparation.data[0])
                 sentences.append((orig_str, reconstruction))
-            dups = np.array(dups)
-            nondups = np.array(nondups)
+            dups = np.exp(np.array(dups))
+            nondups = np.exp(np.array(nondups))
             threshold = (min(dups) + max(nondups)) / 2
 
             true_positives = sum(dups > threshold)
