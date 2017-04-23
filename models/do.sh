@@ -3,6 +3,7 @@ CMD="python autoencoder_main.py \
 	--vocabsize 40000 \
 	--max_sentences 10000000  \
 	--max_supplement 10000000  \
+        --supplement supplemental.csv \
 	--lr 0.001 \
 	--cuda \
 	--din 30 \
