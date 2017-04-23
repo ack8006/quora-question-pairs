@@ -23,6 +23,7 @@ CMD="python autoencoder_main.py \
 	--kloss_shift 7 \
 	--loginterval 20 \
 	--seed_size 10 \
+        --debug \
 	--save_to weight_decay_5.pt"
 
 cat do_test.sh

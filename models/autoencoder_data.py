@@ -28,7 +28,7 @@ def load_data(args, path, glove, limit=1000000):
 
     return qid, q
 
-def to_indices_base(words, dictionary, din):
+def to_indices_base(dictionary, din, words):
     '''From word to word index.'''
     ql = [dictionary.get(str(w).lower(), dictionary['<unk>']) for w in words]
     qv = np.ones(din, dtype=int) * dictionary['<pad>'] # all padding
@@ -36,20 +36,19 @@ def to_indices_base(words, dictionary, din):
     return qv
 
 def clean_and_tokenize(args, data, dictionary):
-    to_indices = partial(to_indices_base,
-        dictionary=dictionary,
-        din=args.din)
+    to_indices = partial(to_indices_base, dictionary, args.din)
 
     qs = []
     processed = 0
     qids = [example.qid for example in data.itertuples()]
     tokens = [example.question for example in data.itertuples()]
-    nlps = nlp.pipe(tokens, parse=False, n_threads=4, batch_size=10000)
+    nlps = list(nlp.pipe(tokens, parse=False, n_threads=4, batch_size=10000))
+    print(list(nlps[0]))
     to_ind_pool = Pool(4)
-    indices = to_ind_pool.map(to_indices, nlps) # order is important
-    for qid, ind in itertools.izip(qids, indices):
-        #if processed % 10000 == 0: # Unhelpful, multithreaded
-        #    print('processed {0}'.format(processed))
+    for qid, parsed in itertools.izip(qids, nlps):
+        if processed % 20000 == 0:
+            print('processed {0}'.format(processed))
+        ind = to_indices(parsed)
         qs.append(ind)
         processed += 1
     assert len(qids) == len(data)
