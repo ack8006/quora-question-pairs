@@ -304,13 +304,19 @@ def main():
             first_batch = True
             print('Precomputing batches')
             cur_batches = cache(batches) # Precompute the batch.
-            dloss_factor = next(dloss_schedule)
-            sloss_factor = next(sloss_schedule)
-            kloss_factor = next(kloss_schedule)
-            print('Epoch {} start, dloss*={:.6f}, sloss*={:.6f}, kloss*={:.6f}'.\
-                    format(eid, dloss_factor, sloss_factor, kloss_factor))
+            # dloss_factor = next(dloss_schedule)
+            # sloss_factor = next(sloss_schedule)
+            # kloss_factor = next(kloss_schedule)
+            # print('Epoch {} start, dloss*={:.6f}, sloss*={:.6f}, kloss*={:.6f}'.\
+            #         format(eid, dloss_factor, sloss_factor, kloss_factor))
+            print('Epoch {} start'.format(eid))
             batchcount = 0
             for ind, (input, duplicate_matrix) in enumerate(cur_batches):
+                # Ramp up losses by batch.
+                dloss_factor = next(dloss_schedule)
+                sloss_factor = next(sloss_schedule)
+                kloss_factor = next(kloss_schedule)
+
                 batchcount = ind + 1
                 total_batchcount += 1
                 start_time = time.time()

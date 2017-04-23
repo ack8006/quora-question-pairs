@@ -10,18 +10,18 @@ CMD="python autoencoder_main.py \
 	--dhid 200 \
 	--demb 200 \
 	--epochs 25 --batches 1000 --batchsize 80 \
-	--dropout 0.4 \
+	--dropout 0.5 \
 	--nlayers 1 \
 	--squash_size 100 \
 	--sloss_factor 1.0 \
-	--sloss_slope 0.6 \
-	--sloss_shift 5 \
+	--sloss_slope 0.08 \
+	--sloss_shift 50 \
 	--dloss_factor 1.5 \
-	--dloss_slope 1 \
-	--dloss_shift 5 \
+	--dloss_slope 0.08 \
+	--dloss_shift 80 \
 	--kloss_factor 1.0 \
-	--kloss_slope 1 \
-	--kloss_shift 7 \
+	--kloss_slope 0.1 \
+	--kloss_shift 50 \
 	--seed_size 15 \
 	--save_to vae_0.pt"
 
