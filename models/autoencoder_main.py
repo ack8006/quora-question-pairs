@@ -220,8 +220,9 @@ def distance_loss(log_prob, duplicate_matrix):
 
     # Gap loss between lest likely duplicate and most likely non-duplicate.
     gap = 1 + max_non - min_dup
-    spread = torch.abs(max_dup - min_non)
-    k = 100.0
+    spread = (max_dup - min_dup) + (max_non - min_non) + \
+            torch.abs(max_non - min_dup)
+    k = 1000.0
     e = 100.0
     anti_collapse = spread.mul_(k).add_(1./e).pow(-1).div_(k)
     separation = max_dup - max_non
