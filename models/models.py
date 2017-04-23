@@ -164,7 +164,7 @@ class EmbeddingAutoencoder(nn.Module):
     '''
     def __init__(self, word_embedding, bilstm_encoder, bilstm_decoder,
             dropout=0.0, embed_size=20, squash_size=50, glove=None, cuda=False,
-            word_dropout=0.0):
+            word_dropout=0.0, extra_noise=0.0):
         '''Args:
             word_embedding: nn.Embedding - Word IDs to embeddings
             bilstm_encoder: BiLSTM - Sequence to hidden state
@@ -179,6 +179,7 @@ class EmbeddingAutoencoder(nn.Module):
         self.drop = nn.Dropout(dropout)
         self.word_embedding = word_embedding
         self.word_dropout = word_dropout
+        self.extra_noise = extra_noise
         self.bilstm_encoder = bilstm_encoder
         self.bilstm_decoder = bilstm_decoder
 
@@ -294,6 +295,8 @@ class EmbeddingAutoencoder(nn.Module):
         mean = self.fc_mean(hn)
         logvar = self.fc_logvar(hn)
         emb1 = noise(mean.size()) * (logvar / 2).exp() + mean
+        if self.extra_noise > 0:
+            emb1.add_(noise(emb1.size()) * self.extra_noise)
         expand = self.bn_expand(self.fc_expand(emb1))
 
         X1d = X1

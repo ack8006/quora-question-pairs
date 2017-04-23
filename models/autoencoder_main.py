@@ -80,6 +80,8 @@ parser.add_argument('--dropout', type=float, default=0.5,
                     help='dropout applied to layers (0 = no dropout)')
 parser.add_argument('--word_dropout', type=float, default=0.0,
                     help='randomly zero out some words going into the encoder')
+parser.add_argument('--extra_noise', type=float, default=0.0,
+                    help='more noise generated on top of VAE sampling')
 
 # Labeled training sample generation.
 parser.add_argument('--seed_size', type=int, default=10,
@@ -270,7 +272,8 @@ def main():
         squash_size=args.squash_size,
         cuda=args.cuda,
         dropout=emb_dropout,
-        word_dropout=args.word_dropout)
+        word_dropout=args.word_dropout,
+        extra_noise=args.extra_noise)
     print(model)
 
     reconstruction_loss = nn.CrossEntropyLoss()
