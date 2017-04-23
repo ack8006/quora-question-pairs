@@ -6,13 +6,12 @@ CMD="python autoencoder_main.py \
 	--max_supplement 27000  \
 	--lr 0.001 \
 	--din 30 \
-	--dhid 60 \
+	--dhid 50 \
 	--demb 50 \
 	--epochs 25 --batches 400 --batchsize 20 \
 	--dropout 0.5 \
 	--nlayers 1 \
-	--embed_size 50 \
-	--squash_size 20 \
+	--squash_size 100 \
 	--sloss_factor 1.0 \
 	--sloss_slope 0.6 \
 	--sloss_shift 5 \
@@ -24,7 +23,8 @@ CMD="python autoencoder_main.py \
 	--kloss_shift 7 \
 	--loginterval 20 \
 	--seed_size 10 \
-        --debug \
+	--cuda \
+	--debug \
 	--save_to weight_decay_5.pt"
 
 cat do_test.sh
