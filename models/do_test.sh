@@ -6,7 +6,7 @@ CMD="python autoencoder_main.py \
 	--max_supplement 27000  \
 	--lr 0.001 \
 	--din 30 \
-	--dhid 50 \
+	--dhid 60 \
 	--demb 50 \
 	--epochs 25 --batches 400 --batchsize 20 \
 	--dropout 0.5 \
@@ -23,8 +23,7 @@ CMD="python autoencoder_main.py \
 	--kloss_shift 7 \
 	--loginterval 20 \
 	--seed_size 10 \
-	--cuda \
-	--debug \
+        --debug \
 	--save_to weight_decay_5.pt"
 
 cat do_test.sh

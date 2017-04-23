@@ -221,26 +221,26 @@ class EmbeddingAutoencoder(nn.Module):
         '''Run X through the encoder part. Args:
             X: B x Seq_Len x D word embeddings
         Returns:
-            hn: B x 2ND encoded sentence for each batch.'''
+            hn: B x 2NH encoded sentence for each batch.'''
         h0 = self.init_hidden(X.size(0), self.bilstm_encoder.lstm)
         _, hid, _ = self.bilstm_encoder(X, h0) # Want only the hidden states.
 
-        # Rotate hid so batchnorm works. hn = 2n x b x d
+        # Rotate hid so batchnorm works. hn = 2n x b x h
         hn = hid.transpose(0, 1).contiguous().\
-            view(hid.size(1), hid.size(0) * hid.size(2)) # b x 2nd
+            view(hid.size(1), hid.size(0) * hid.size(2)) # b x 2nh
         hn = self.batchnorm(hn)
         return hn
 
     def decoder(self, expand, X):
         '''Run X through the decoder part. Args:
-            h0: 2N x B x D hidden states from encoder.
+            h0: 2N x B x H hidden states from encoder.
             X: B x Seq_Len x D word embeddings of the correct answer.
         Returns:
             output: B x Seq_Len X D output class probabilities.'''
-        # B x 2ND -> 2N x B x D
+        # B x 2ND -> 2N x B x H
         n = self.bilstm_decoder.lstm.num_layers
-        d = self.bilstm_decoder.lstm.input_size
-        h1_noised = expand.view(-1, 2 * n, d).transpose(1, 0)
+        h = self.bilstm_decoder.lstm.hidden_size
+        h1_noised = expand.view(-1, 2 * n, h).transpose(1, 0)
 
         # B x S x 2D
         h0 = self.init_hidden(X.size(0), self.bilstm_decoder.lstm)
@@ -282,7 +282,7 @@ class EmbeddingAutoencoder(nn.Module):
             prob: pairwise probabilities between X1 and X2 FloatTensor Variable
                   of size B x B'''
         X1 = self.drop(self.word_embedding(X1))
-        hn = self.encoder(X1) # B x 2ND
+        hn = self.encoder(X1) # B x 2NH
 
         # Compute variational sample
         mean = self.fc_mean(hn)
