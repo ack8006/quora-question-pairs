@@ -286,16 +286,9 @@ class EmbeddingAutoencoder(nn.Module):
             auto_X1: autoencoded X1 (B x Seq_Len x W) log-probabilities
             prob: pairwise probabilities between X1 and X2 FloatTensor Variable
                   of size B x B'''
+        Xin = X1
         X1 = self.drop(self.word_embedding(X1)) # B x S x D
-        X1d = X1
-        if self.word_dropout > 0:
-            # Dropout entire words.
-            mask = torch.Tensor(X1d.size()).uniform_(0, 1)
-            mask = mask.gt(self.word_dropout).float()
-            if self.cuda:
-                mask = mask.cuda()
-            X1d = X1.mul(mask)
-        hn = self.encoder(X1d) # B x 2NH
+        hn = self.encoder(X1) # B x 2NH
 
         # Compute variational sample
         mean = self.fc_mean(hn)
@@ -303,7 +296,17 @@ class EmbeddingAutoencoder(nn.Module):
         emb1 = noise(mean.size()) * (logvar / 2).exp() + mean
         expand = self.bn_expand(self.fc_expand(emb1))
 
-        auto_X1 = self.decoder(expand, X1)
+        X1d = X1
+        if self.word_dropout > 0:
+            # Dropout entire words during generation.
+            mask = torch.Tensor(Xin.size()).uniform_(0, 1).unsqueeze(2)
+            mask = mask.gt(self.word_dropout).float()
+            if self.is_cuda:
+                mask = mask.cuda()
+            # Zero out the entire word.
+            X1d = X1.mul(Variable(mask).repeat(1, 1, X1.size(2)))
+            #print(X1d)
+        auto_X1 = self.decoder(expand, X1d)
         prob = None
         if calculate_dist:
             squash = self.bn_squash(self.fc_squash(emb1))

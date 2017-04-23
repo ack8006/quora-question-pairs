@@ -269,7 +269,8 @@ def main():
         embed_size=args.embed_size,
         squash_size=args.squash_size,
         cuda=args.cuda,
-        dropout=emb_dropout)
+        dropout=emb_dropout,
+        word_dropout=args.word_dropout)
     print(model)
 
     reconstruction_loss = nn.CrossEntropyLoss()
