@@ -1,28 +1,28 @@
 #!/bin/bash
 CMD="python autoencoder_main.py \
 	--vocabsize 40000 \
-	--max_sentences 350000  \
-        --supplement ../data/supplemental.csv \
-	--max_supplement 700000  \
+	--max_sentences 10000000  \
+	--max_supplement 10000000  \
 	--lr 0.001 \
 	--cuda \
 	--din 30 \
-	--dhid 300 \
+	--dhid 200 \
 	--demb 200 \
 	--epochs 25 --batches 1000 --batchsize 80 \
-	--dropout 0.5 \
+	--dropout 0.4 \
 	--nlayers 1 \
 	--squash_size 100 \
-	--noise_stdev 0.015 \
-	--sloss_factor 0.3 \
+	--sloss_factor 1.0 \
 	--sloss_slope 0.6 \
 	--sloss_shift 5 \
-	--dloss_factor 1.0 \
+	--dloss_factor 1.5 \
 	--dloss_slope 1 \
 	--dloss_shift 5 \
+	--kloss_factor 1.0 \
+	--kloss_slope 1 \
+	--kloss_shift 7 \
 	--seed_size 15 \
-	--optimizer \
-	--save_to weight_decay_5.pt"
+	--save_to vae_0.pt"
 
 
 cat do.sh
