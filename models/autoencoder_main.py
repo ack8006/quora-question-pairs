@@ -214,14 +214,19 @@ def distance_loss(log_prob, duplicate_matrix):
     min_dup = (log_prob * duplicate_matrix).min(dim=1)[0].exp()[has_dup]
     max_non = (log_prob.exp() * non_duplicate_matrix).max(dim=1)[0][has_dup]
     max_dup = (log_prob.exp() * duplicate_matrix).max(dim=1)[0][has_dup]
+    min_non = (log_prob * non_duplicate_matrix).min(dim=1)[0].exp()[has_dup]
     #print(max_dup - min_dup)
     #print(torch.stack([max_dup, min_dup, max_non], 1))
 
     # Gap loss between lest likely duplicate and most likely non-duplicate.
     gap = 1 + max_non - min_dup
+    spread = torch.abs(max_dup - min_non)
+    k = 100.0
+    e = 100.0
+    anti_collapse = spread.mul_(k).add_(1./e).pow(-1).div_(k)
     separation = max_dup - max_non
     #print(torch.stack([gap, separation], 1))
-    return gap.mean(), separation.mean()
+    return (gap + anti_collapse).mean(), separation.mean()
 
 def measure(log_prob, duplicate_matrix, dups, nondups):
     '''Return the un-normalized log probabilities'''
@@ -324,6 +329,7 @@ def main():
             #         format(eid, dloss_factor, sloss_factor, kloss_factor))
             print('Epoch {} start'.format(eid))
             batchcount = 0
+            extra_kloss_factor = 0.0
             for ind, (input, duplicate_matrix) in enumerate(cur_batches):
                 # Ramp up losses by batch.
                 dloss_factor = next(dloss_schedule)
