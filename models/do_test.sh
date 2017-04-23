@@ -11,7 +11,8 @@ CMD="python autoencoder_main.py \
 	--epochs 25 --batches 400 --batchsize 20 \
 	--dropout 0.5 \
 	--nlayers 1 \
-	--squash_size 100 \
+	--embed_size 50 \
+	--squash_size 20 \
 	--sloss_factor 1.0 \
 	--sloss_slope 0.6 \
 	--sloss_shift 5 \

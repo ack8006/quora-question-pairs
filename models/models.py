@@ -163,13 +163,14 @@ class EmbeddingAutoencoder(nn.Module):
           closely together.
     '''
     def __init__(self, word_embedding, bilstm_encoder, bilstm_decoder,
-            dropout=0.0, embed_size=20, glove=None, cuda=False):
+            dropout=0.0, embed_size=20, squash_size=50, glove=None, cuda=False):
         '''Args:
             word_embedding: nn.Embedding - Word IDs to embeddings
             bilstm_encoder: BiLSTM - Sequence to hidden state
             bilstm_decoder: BiLSTM - Hidden state to sequence of hidden states
             dropout: Float value that controls dropout aggressiveness.
-            embed_size: Embedded vector size.
+            embed_size: Embedded vector size that gets sent to the decoder.
+            squash_size: Dimensionality of vector distance calculation.
             glove: Tensor containing GloVE vectors for init. Can be None.
         Dimensions must agree with each other.
         '''
@@ -185,6 +186,7 @@ class EmbeddingAutoencoder(nn.Module):
         self.fc_mean = FC(encoder_dim, embed_size, 0.0)
         self.fc_logvar = FC(encoder_dim, embed_size, 0.0)
         self.fc_expand = FC(embed_size, encoder_dim, dropout)
+        self.fc_squash = FC(embed_size, squash_size, dropout)
 
         self.fc_decoder = FC(self.bilstm_decoder.lstm.hidden_size * 2,
                 self.word_embedding.num_embeddings, dropout)
@@ -194,6 +196,7 @@ class EmbeddingAutoencoder(nn.Module):
         self.bn_expand = nn.BatchNorm1d(
                 2 * self.bilstm_encoder.lstm.num_layers *
                 self.bilstm_encoder.lstm.hidden_size)
+        self.bn_squash = nn.BatchNorm1d(squash_size)
         self.batchnorm_decode = nn.BatchNorm1d(
                 2 * self.bilstm_decoder.lstm.hidden_size)
 
@@ -293,7 +296,8 @@ class EmbeddingAutoencoder(nn.Module):
         auto_X1 = self.decoder(expand, X1)
         prob = None
         if calculate_dist:
-            prob = self.pair_log_probabilities(emb1)
+            squash = self.bn_squash(self.fc_squash(emb1))
+            prob = self.pair_log_probabilities(squash)
             
         return auto_X1, mean, logvar, prob
 

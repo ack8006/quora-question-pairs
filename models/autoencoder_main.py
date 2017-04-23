@@ -262,7 +262,10 @@ def main():
     if args.more_dropout:
         emb_dropout = args.dropout
     model = EmbeddingAutoencoder(embedding, bilstm_encoder, bilstm_decoder,
-        embed_size=args.squash_size, cuda=args.cuda, dropout=emb_dropout)
+        embed_size=args.embed_size,
+        squash_size=args.squash_size,
+        cuda=args.cuda,
+        dropout=emb_dropout)
     print(model)
 
     reconstruction_loss = nn.CrossEntropyLoss()
