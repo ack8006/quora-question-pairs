@@ -305,7 +305,6 @@ class EmbeddingAutoencoder(nn.Module):
                 mask = mask.cuda()
             # Zero out the entire word.
             X1d = X1.mul(Variable(mask).repeat(1, 1, X1.size(2)))
-            #print(X1d)
         auto_X1 = self.decoder(expand, X1d)
         prob = None
         if calculate_dist:
