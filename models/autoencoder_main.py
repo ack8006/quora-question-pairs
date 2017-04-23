@@ -233,6 +233,7 @@ def noise(args):
     for_size = {}
     def generate_noise(size):
         if size not in for_size:
+            print('New noise size:', size)
             def gen():
                 while True:
                     batch = [Variable(cd(torch.randn(size)) * stdev)
