@@ -78,6 +78,8 @@ parser.add_argument('--clip', type=float, default=0.25,
                     help='gradient clipping')
 parser.add_argument('--dropout', type=float, default=0.5,
                     help='dropout applied to layers (0 = no dropout)')
+parser.add_argument('--word_dropout', type=float, default=0.0,
+                    help='randomly zero out some words going into the encoder')
 
 # Labeled training sample generation.
 parser.add_argument('--seed_size', type=int, default=10,

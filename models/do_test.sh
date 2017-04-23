@@ -22,10 +22,10 @@ CMD="python autoencoder_main.py \
 	--kloss_slope 1 \
 	--kloss_shift 7 \
 	--loginterval 20 \
+	--word_dropout 0.3 \
 	--seed_size 10 \
-	--cuda \
 	--debug \
-	--save_to weight_decay_5.pt"
+	--save_to debug.pt"
 
 cat do_test.sh
 $CMD

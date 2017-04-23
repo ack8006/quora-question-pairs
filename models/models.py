@@ -163,7 +163,8 @@ class EmbeddingAutoencoder(nn.Module):
           closely together.
     '''
     def __init__(self, word_embedding, bilstm_encoder, bilstm_decoder,
-            dropout=0.0, embed_size=20, squash_size=50, glove=None, cuda=False):
+            dropout=0.0, embed_size=20, squash_size=50, glove=None, cuda=False,
+            word_dropout=0.0):
         '''Args:
             word_embedding: nn.Embedding - Word IDs to embeddings
             bilstm_encoder: BiLSTM - Sequence to hidden state
@@ -177,6 +178,7 @@ class EmbeddingAutoencoder(nn.Module):
         super(EmbeddingAutoencoder, self).__init__()
         self.drop = nn.Dropout(dropout)
         self.word_embedding = word_embedding
+        self.word_dropout = word_dropout
         self.bilstm_encoder = bilstm_encoder
         self.bilstm_decoder = bilstm_decoder
 
@@ -284,8 +286,16 @@ class EmbeddingAutoencoder(nn.Module):
             auto_X1: autoencoded X1 (B x Seq_Len x W) log-probabilities
             prob: pairwise probabilities between X1 and X2 FloatTensor Variable
                   of size B x B'''
-        X1 = self.drop(self.word_embedding(X1))
-        hn = self.encoder(X1) # B x 2NH
+        X1 = self.drop(self.word_embedding(X1)) # B x S x D
+        X1d = X1
+        if self.word_dropout > 0:
+            # Dropout entire words.
+            mask = torch.Tensor(X1d.size()).uniform_(0, 1)
+            mask = mask.gt(self.word_dropout).float()
+            if self.cuda:
+                mask = mask.cuda()
+            X1d = X1.mul(mask)
+        hn = self.encoder(X1d) # B x 2NH
 
         # Compute variational sample
         mean = self.fc_mean(hn)
