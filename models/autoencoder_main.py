@@ -42,8 +42,10 @@ parser.add_argument('--dhid', type=int, default=100,
                     help='humber of hidden units per layer')
 parser.add_argument('--nlayers', type=int, default=1,
                     help='number of layers')
-parser.add_argument('--squash_size', type=int, default=40,
-                    help='sentence embedding squash size')
+parser.add_argument('--embed_size', type=int, default=40,
+                    help='sentence embedding size')
+parser.add_argument('--squash_size', type=int, default=20,
+                    help='sentence squash size for distance calculation')
 
 # D-loss (distance loss) tuning parameters
 parser.add_argument('--dloss_factor', type=float, default=1.0,
