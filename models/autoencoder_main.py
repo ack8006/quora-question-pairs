@@ -166,14 +166,13 @@ def generate_supplement(args, data):
     cd = lambda x: x if not args.cuda else x.cuda()
 
     while True:
-        print(len(indices))
         np.random.shuffle(indices)
         for batch in xrange(0, len(indices), args.batchsize): # Seed size
-            if len(indices) - batch != args.batchsize:
+            batch_indices = indices[batch:(batch + args.batchsize)]
+            if len(batch_indices) < args.batchsize:
                 # Skip to keep batch size constant; indices will get shuffled
                 # anyway.
                 continue
-            batch_indices = indices[batch:(batch + args.batchsize)]
             yield cd(questions[torch.LongTensor(batch_indices)])
 
 
