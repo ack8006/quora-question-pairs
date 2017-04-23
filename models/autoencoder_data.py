@@ -9,6 +9,8 @@ import numpy as np
 import torch
 import itertools
 import re
+from functools import partial
+from multiprocessing import Pool
 
 nlp = spacy.load('en', parser=False)
 strip_padding = re.compile('(?: <pad>)+ *$')
@@ -26,23 +28,29 @@ def load_data(args, path, glove, limit=1000000):
 
     return qid, q
 
+def to_indices_base(words, dictionary, din):
+    '''From word to word index.'''
+    ql = [dictionary.get(str(w).lower(), dictionary['<unk>']) for w in words]
+    qv = np.ones(din, dtype=int) * dictionary['<pad>'] # all padding
+    qv[:len(ql)] = ql[:din] # set values
+    return qv
+
 def clean_and_tokenize(args, data, dictionary):
-    def to_indices(words):
-        '''From word to word index.'''
-        ql = [dictionary.get(str(w).lower(), dictionary['<unk>']) for w in words]
-        qv = np.ones(args.din, dtype=int) * dictionary['<pad>'] # all padding
-        qv[:len(ql)] = ql[:args.din] # set values
-        return qv
+    to_indices = partial(to_indices_base,
+        dictionary=dictionary,
+        din=args.din)
 
     qs = []
     processed = 0
     qids = [example.qid for example in data.itertuples()]
-    tokens = (example.question for example in data.itertuples())
-    nlps = nlp.pipe(tokens, parse=False, n_threads=16, batch_size=10000)
-    for qid, tokens in itertools.izip(qids, nlps):
-        if processed % 10000 == 0:
-            print('processed {0}'.format(processed))
-        qs.append(to_indices(tokens))
+    tokens = [example.question for example in data.itertuples()]
+    nlps = nlp.pipe(tokens, parse=False, n_threads=4, batch_size=10000)
+    to_ind_pool = Pool(4)
+    indices = to_ind_pool.map(to_indices, nlps) # order is important
+    for qid, ind in itertools.izip(qids, indices):
+        #if processed % 10000 == 0: # Unhelpful, multithreaded
+        #    print('processed {0}'.format(processed))
+        qs.append(ind)
         processed += 1
     assert len(qids) == len(data)
     assert len(qs) == len(data)
@@ -84,7 +92,7 @@ class Data:
         if args.supplement is not None:
             print('fetching unsupervised')
             _, self.questions_supplement = \
-                    load_data(args, f('supplemental.csv'), self.glove, args.max_supplement)
+                    load_data(args, f(args.supplement), self.glove, args.max_supplement)
         else:
             self.qid_supplement, self.questions_supplement = None, None
 

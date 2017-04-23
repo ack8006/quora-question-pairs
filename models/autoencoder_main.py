@@ -166,6 +166,7 @@ def generate_supplement(args, data):
     cd = lambda x: x if not args.cuda else x.cuda()
 
     while True:
+        print(len(indices))
         np.random.shuffle(indices)
         for batch in xrange(0, len(indices), args.batchsize): # Seed size
             if len(indices) - batch != args.batchsize:

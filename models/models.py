@@ -244,7 +244,7 @@ class EmbeddingAutoencoder(nn.Module):
 
         # B x S x 2D
         h0 = self.init_hidden(X.size(0), self.bilstm_decoder.lstm)
-        h0 = (h1_noised, h0[1])
+        h0 = (h1_noised.contiguous(), h0[1])
         out, _, _ = self.bilstm_decoder(X, h0)
 
         # S (B x 2D)
