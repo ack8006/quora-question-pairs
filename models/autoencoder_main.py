@@ -334,7 +334,7 @@ def main():
                     auto_s, mean_s, logvar_s, _ = model(supp, noiser, False)
                     sloss = bsz * reconstruction_loss(
                             auto_s.view(-1, args.vocabsize), supp.view(-1))
-                    kl_s = kl_div_with_std_norm(mean, logvar).mean()
+                    kl_s = kl_div_with_std_norm(mean_s, logvar_s).mean()
 
                 if args.debug and first_batch:
                     print('INPUT:', input)
@@ -344,7 +344,8 @@ def main():
 
                 # Assemble the complete loss function.
                 loss = rloss + kloss_factor * kl
-                loss += sloss_factor * (sloss + kloss_factor * kl)
+                if supplement_loader is not None:
+                    loss += sloss_factor * (sloss + kloss_factor * kl_s)
                 loss += dloss_factor * dloss
 
                 loss.backward()
