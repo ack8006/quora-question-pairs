@@ -84,6 +84,10 @@ parser.add_argument('--word_dropout', type=float, default=0.0,
                     help='randomly zero out some words going into the encoder')
 parser.add_argument('--extra_noise', type=float, default=0.0,
                     help='more noise generated on top of VAE sampling')
+parser.add_argument('--anti_collapse_k', type=float, default=100.0,
+                    help='controls steepness of the spread collapse region.')
+parser.add_argument('--anti_collapse_e', type=float, default=100.0,
+                    help='controls height of the spread collapse region.')
 
 # Labeled training sample generation.
 parser.add_argument('--seed_size', type=int, default=10,
@@ -222,8 +226,8 @@ def distance_loss(log_prob, duplicate_matrix):
     gap = 1 + max_non - min_dup
     spread = (max_dup - min_dup) + (max_non - min_non) + \
             torch.abs(max_non - min_dup)
-    k = 1000.0
-    e = 100.0
+    k = args.anti_collapse_k
+    e = args.anti_collapse_e
     anti_collapse = spread.mul_(k).add_(1./e).pow(-1).div_(k)
     separation = max_dup - max_non
     #print(torch.stack([gap, separation], 1))
