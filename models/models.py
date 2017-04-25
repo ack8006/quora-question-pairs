@@ -40,11 +40,11 @@ class MLP(nn.Module):
         super(MLP, self).__init__()
         self.dropout = dropout
 
-        self.bn1 = nn.BatchNorm1(d_in)
+        self.bn1 = nn.BatchNorm1d(d_in)
         self.linear1 = nn.Linear(d_in, d_hid1, bias=True)
-        self.bn2 = nn.BatchNorm1(d_hid1)
+        self.bn2 = nn.BatchNorm1d(d_hid1)
         self.linear2 = nn.Linear(d_hid1, d_hid2, bias=True)
-        self.bn3 = nn.BatchNorm1(d_hid2)
+        self.bn3 = nn.BatchNorm1d(d_hid2)
         self.linear3 = nn.Linear(d_hid2, d_out, bias=True)
 
 
