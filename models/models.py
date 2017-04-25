@@ -40,15 +40,23 @@ class MLP(nn.Module):
         super(MLP, self).__init__()
         self.dropout = dropout
 
+        self.bn1 = nn.BatchNorm1(d_in)
         self.linear1 = nn.Linear(d_in, d_hid1, bias=True)
+        self.bn2 = nn.BatchNorm1(d_hid1)
         self.linear2 = nn.Linear(d_hid1, d_hid2, bias=True)
+        self.bn3 = nn.BatchNorm1(d_hid2)
         self.linear3 = nn.Linear(d_hid2, d_out, bias=True)
 
 
     def forward(self, X):
-        X = F.dropout(self.linear1(X), p=self.dropout)
-        X = F.dropout(self.linear2(X), p=self.dropout)
-        X = F.dropout(self.linear3(X), p=self.dropout)
+        X = self.bn1(X)
+        X = self.linear1(X)
+        X = F.dropout(F.leaky_relu(X, negative_slope=1 / 5.5), p=self.dropout)
+        X = self.bn2(X)
+        X = self.linear2(X)
+        X = F.dropout(F.leaky_relu(X, negative_slope=1 / 5.5), p=self.dropout)
+        X = self.bn3(X)
+        X = self.linear3(X)
         return F.log_softmax(X)
 
 
