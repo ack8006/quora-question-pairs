@@ -455,7 +455,7 @@ class AutoencoderClassifier(nn.Module):
 
     def projection(self, mu):
         cube = (mu.size(0), self.n_projections, self.projection_dim)
-        proj1 = self.proj(mu1).view(cube) # BxPxD
+        proj1 = self.proj(mu).view(cube) # BxPxD
         return proj1.pow(2).sum(dim=2) # BxP
 
     def forward(self, X1, X2):
@@ -474,7 +474,7 @@ class AutoencoderClassifier(nn.Module):
         if self.mode == 'projections':
             proj1 = self.projection(mu1)
             proj2 = self.projection(mu2)
-            projs = torch.cat([proj1, proj2], dim=1) # Bx2P
+            projs = torch.cat([proj1, proj2], 1) # Bx2P
         else:
             projs = Variable(torch.zeros((X1.size(0), 2 * self.n_projections)))
 
