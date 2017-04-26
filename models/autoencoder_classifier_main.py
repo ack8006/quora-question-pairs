@@ -89,6 +89,8 @@ def cache(x, batchsize=250):
 def generate_labeled(args, triplets, qid, questions):
     '''Generates Q1, Q2, Y tensors in epochs.'''
     rlookup = {qid: i for i, qid in enumerate(qid)}
+    has = lambda (qid1, qid2, y): qid1 in rlookup and qid2 in rlookup
+    triplets = filter(has, triplets)
     def epoch():
         np.random.shuffle(triplets)
         for batch_idx in xrange(0, len(triplets), args.batchsize):
@@ -176,7 +178,6 @@ def main():
                 q2 = Variable(q2)
                 y = Variable(y)
                 model.zero_grad()
-                bsz = input.size(0)
 
                 # RUN THE MODEL FOR THIS BATCH.
                 score = model(q1, q2)
@@ -217,9 +218,6 @@ def main():
             for ind, (q1, q2, y) in enumerate(valids):
                 if ind > args.valid_batches:
                     break
-                input = Variable(input)
-                idx = random.randint(0, len(input) - 1) # which sentence?
-                orig_str = data.to_str(input[idx].data)
 
                 # Run on validation set.
                 q1 = Variable(q1)
