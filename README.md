@@ -13,6 +13,8 @@ TODO (ALEX):
 - Recurrent CNN Model
 
 TODO(Abhishek):
+- Review code.
+- Check the hyperparameters for the experiments.
 
 TODO(Cipta):
 
