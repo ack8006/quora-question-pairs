@@ -466,6 +466,11 @@ class AutoencoderClassifier(nn.Module):
         len1 = mu1.pow(2) # ||mu||^2 # BxE
         len2 = mu2.pow(2) # ||mu||^2 # BxE
 
+        if self.mode == 'distance':
+            # Do not use distance in decision.
+            len1 = len1.mul(0)
+            len2 = len1
+
         if self.mode == 'projections':
             proj1 = self.projection(mu1)
             proj2 = self.projection(mu2)
@@ -475,9 +480,10 @@ class AutoencoderClassifier(nn.Module):
 
         all_features = torch.cat([pdist, len1, len2, projs], dim=1)
         if self.use_mlp:
-            return self.mlp(all_features)
+            res = self.mlp(all_features)
         else:
-            return self.fc(all_features)
+            res = self.fc(all_features)
+        return torch.sigmoid(res) # Between 0 and 1
 
 
 

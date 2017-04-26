@@ -28,6 +28,13 @@ def load_data(args, path, glove, limit=1000000):
 
     return qid, q
 
+def load_triplets(args, path):
+    data = pd.read_csv(path, header=None, index_col=None)
+    data.columns = ['qid1', 'qid2', 'is_duplicate']
+    trip = []
+    for tup in data.itertuples():
+        trip.append((tup.qid1, tup.qid2, tup.is_duplicate))
+
 def to_indices_base(dictionary, din, words):
     '''From word to word index.'''
     ql = [dictionary.get(str(w).lower(), dictionary['<unk>']) for w in words]
@@ -117,5 +124,24 @@ class Data:
         return self.to_str(chosen)
 
 
+class ClassifyData:
+    '''Dataset to load, and the dictionary used to read them.'''
+    def __init__(self, args):
+        f = lambda fname: os.path.join(args.datadir, fname)
 
+        print('loading Glove')
+        assert args.demb in (50, 100, 200, 300)
+        self.glove = LoadedGlove(data.load_embeddings(
+                f('glove.6B.{0}d.txt'.format(args.demb)),
+                max_words=args.vocabsize))
+
+        print('fetching train')
+        self.train_triplets = load_triplets(args, f('train_triplets.csv'))
+        self.qid_train, self.questions_train = \
+                load_data(args, f('questions_train.csv'), self.glove, args.max_sentences)
+
+        print('fetching valid')
+        self.valid_triplets = load_triplets(args, f('valid_triplets.csv'))
+        self.qid_valid, self.questions_valid = \
+                load_data(args, f('questions_valid.csv'), self.glove, args.max_sentences)
 
