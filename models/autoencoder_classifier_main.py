@@ -48,7 +48,7 @@ parser.add_argument('--dropout', type=float, default=0.5,
                     help='dropout applied to layers (0 = no dropout)')
 
 # Classifier parameters.
-parser.add_argument('--mlp', action='store_true',
+parser.add_argument('--use_mlp', action='store_true',
                     help='feed length based features into MLP')
 parser.add_argument('--mode', type=str, default='distance',
                     help='feed length based features into MLP')
