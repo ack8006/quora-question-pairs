@@ -456,7 +456,7 @@ class AutoencoderClassifier(nn.Module):
     def projection(self, mu):
         cube = (mu.size(0), self.n_projections, self.projection_dim)
         proj1 = self.proj(mu).view(cube) # BxPxD
-        return proj1.pow(2).sum(dim=2) # BxP
+        return proj1.pow(2).sum(dim=2).squeeze() # BxP
 
     def forward(self, X1, X2):
         mu1 = self.get_embedding(X1) # BxE
