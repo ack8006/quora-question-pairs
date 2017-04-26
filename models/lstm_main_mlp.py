@@ -20,7 +20,7 @@ from sklearn.metrics import log_loss
 from nltk.stem import SnowballStemmer
 from nltk.stem.wordnet import WordNetLemmatizer
 
-from models import LSTMModelMLP
+from models2 import LSTMModelMLP
 sys.path.append('../utils/')
 from data import TacoText
 from preprocess import load_data
@@ -45,7 +45,6 @@ def evaluate(model, data_loader, cuda):
     correct, total = 0, 0
     pred_list = []
     true_list = []
-    soft_max = torch.nn.Softmax()
     for ind, (qs, duplicate) in enumerate(data_loader):
         out = model(qs[:, 0, 0, :], qs[:, 0, 1, :])
         pred = out.data.max(1)[1]
@@ -54,9 +53,9 @@ def evaluate(model, data_loader, cuda):
             duplicate = duplicate.cuda()
         correct += (pred == duplicate).sum()
         total += len(pred)
-        pred_list += list(soft_max(out)[:, 1].data.cpu().numpy())
+        pred_list += list(out.exp()[:, 1].data.cpu().numpy())
         true_list += list(duplicate.cpu().numpy())
-    return (correct / total), log_loss(true_list, pred_list, eps=1e-7)
+    return (correct / total), log_loss(true_list, pred_list, eps=1e-5)
 
 
 def main():
@@ -163,22 +162,22 @@ def main():
 
     model = LSTMModelMLP(args.din, args.dhid, args.nlayers, args.dout, args.demb, args.vocabsize, 
                         args.dropout, args.embinit, args.hidinit, args.decinit, glove_embeddings,
-                        args.freezeemb, args.cuda)
+                        args.cuda)
 
     if args.cuda:
         model.cuda()
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.NLLLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, 
-                        args.embinit, args.freezeemb, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize,
+                        args.embinit, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize,
                         args.pipeline, args.psw, args.ppunc, args.pntok, args.pkq, args.stem, args.lemma)])
 
-    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | EncoderGrad | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize | pipeline | stop | punc | ntoken | keep_ques | stem | lemma')
+    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize | pipeline | stop | punc | ntoken | keep_ques | stem | lemma')
     print(model_config)
 
-    best_val_acc = 0.78
+    # best_val_acc = 0.78
     best_ll = 0.5
     for epoch in range(args.epochs):
         model.train()

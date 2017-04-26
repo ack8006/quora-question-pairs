@@ -16,6 +16,9 @@ def load_data(data_path, corpus, d_in, train_split=0.90):
     print('Loading Data')
     train_data = pd.read_csv(data_path)
     #Shuffle order of training data
+
+    # train_data = train_data.iloc[:1000]
+
     train_data = train_data.reindex(np.random.permutation(train_data.index))
     val_data = train_data.iloc[int(len(train_data) * train_split):]
     train_data = train_data.iloc[:int(len(train_data) * train_split)]
@@ -23,6 +26,12 @@ def load_data(data_path, corpus, d_in, train_split=0.90):
     print('Cleaning and Tokenizing')
     q1, q2, y = clean_and_tokenize(train_data, corpus)
     q1_val, q2_val, y_val = clean_and_tokenize(val_data, corpus)
+
+    print('Piping Data')
+    q1 = corpus.pipe_data(q1)
+    q2 = corpus.pipe_data(q2)
+    q1_val = corpus.pipe_data(q1_val)
+    q2_val = corpus.pipe_data(q2_val)
 
     corpus.gen_vocab(q1 + q2 + q2_val + q1_val)
 
@@ -39,12 +48,6 @@ def clean_and_tokenize(data, corpus):
     y = list(data['is_duplicate'])
     q1 = [word_tokenize(x) for x in q1]
     q2 = [word_tokenize(x) for x in q2]
-
-    print('Piping Data')
-    print(q1[:5])
-    q1 = corpus.pipe_data(q1)
-    print(q1[:5])
-    q2 = corpus.pipe_data(q2)
 
     return q1, q2, y
 
