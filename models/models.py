@@ -447,8 +447,8 @@ class AutoencoderClassifier(nn.Module):
         self.mlp = MLP(d_all, 512, 256, 1, dropout)
 
     def get_embedding(self, X):
-        X1 = self.autoencoder.drop(self.autoencoder.word_embedding(X1)) # B x S x D
-        hn = self.autoencoder.encoder(X1) # B x 2NH
+        X = self.autoencoder.drop(self.autoencoder.word_embedding(X)) # B x S x D
+        hn = self.autoencoder.encoder(X) # B x 2NH
         mean = self.autoencoder.fc_mean(hn)
         squash = self.autoencoder.bn_squash(self.autoencoder.fc_squash(mean))
         return squash.detach()
