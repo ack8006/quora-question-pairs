@@ -11,7 +11,7 @@ CMD="python autoencoder_classifier_main.py \
 	--demb 200 \
 	--epochs 25 --batchsize 20 \
 	--dropout 0.5 \
-	--loginterval 20 \
+	--loginterval 50 \
 	--save_to classify_debug.pt"
 
 cat do_classify.sh
