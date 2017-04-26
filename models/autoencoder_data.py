@@ -34,6 +34,8 @@ def load_triplets(args, path):
     trip = []
     for tup in data.itertuples():
         trip.append((tup.qid1, tup.qid2, tup.is_duplicate))
+    print(trip[:3])
+    return trip
 
 def to_indices_base(dictionary, din, words):
     '''From word to word index.'''

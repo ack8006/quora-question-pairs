@@ -86,8 +86,9 @@ def cache(x, batchsize=250):
     for c in cache:
         yield c
 
-def generate_labeled(args, triplets, questions):
+def generate_labeled(args, triplets, qid, questions):
     '''Generates Q1, Q2, Y tensors in epochs.'''
+    rlookup = {qid: i for i, qid in enumerate(qid)}
     def epoch():
         np.random.shuffle(triplets)
         for batch_idx in xrange(0, len(triplets), args.batchsize):
@@ -95,8 +96,8 @@ def generate_labeled(args, triplets, questions):
                 return # Do the remainder next epoch
 
             batch = triplets[batch_idx:(batch_idx + args.batchsize)]
-            qid1 = torch.LongTensor([t[0] for t in batch])
-            qid2 = torch.LongTensor([t[1] for t in batch])
+            qid1 = torch.LongTensor([rlookup[t[0]] for t in batch])
+            qid2 = torch.LongTensor([rlookup[t[1]] for t in batch])
             y = torch.ByteTensor([t[2] for t in batch])
             q1 = questions[qid1]
             q2 = questions[qid2]
@@ -113,32 +114,11 @@ def generate_labeled(args, triplets, questions):
 
 def generate_train(args, data):
     return generate_labeled(
-            args, data.train_triplets, data.questions_train)
+            args, data.train_triplets, data.qid_train, data.questions_train)
 
 def generate_valid(args, data):
     return generate_labeled(
-            args, data.valid_triplets, data.questions_valid)
-
-def noise(args):
-    stdev = 1.0
-    batch_size = args.batchsize
-    cd = lambda x: x if not args.cuda else x.cuda()
-    for_size = {}
-    def generate_noise(size):
-        if size not in for_size:
-            print('New noise size:', size)
-            def gen():
-                while True:
-                    batch = [Variable(cd(torch.randn(size)) * stdev)
-                        for i in xrange(batch_size)]
-                    for b in batch:
-                        yield b
-            for_size[size] = gen()
-        return next(for_size[size])
-    # GN: function that takes a size and returns a noise vector with the given
-    # stdev, from a batch.
-    return generate_noise
-
+            args, data.valid_triplets, data.qid_valid, data.questions_valid)
 
 def main():
     data = ClassifyData(args)
