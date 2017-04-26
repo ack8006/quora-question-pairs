@@ -262,7 +262,7 @@ class LSTMModelMLPFeat(nn.Module):
         if emb_init == 'glove' and glove_emb is not None:
             self.embedding.weight.data = glove_emb
         else:
-            init_types[emb_init](self.embedding1.weight)
+            init_types[emb_init](self.embedding.weight)
 
         self.bilstm.init_weights(hid_init)
         self.mlp.init_weights(dec_init)
@@ -299,6 +299,81 @@ class LSTMModelMLPFeat(nn.Module):
                     Variable(torch.zeros(self.n_layers * 2, batch_size, self.d_hid)))
 
 
+class LSTMModelMLPFeatDist(nn.Module):
+    def __init__(self, d_in, d_hid, n_layers, d_out, d_emb, dfeat, vocab, dropout,
+                    emb_init, hid_init, dec_init, glove_emb, is_cuda):
+        super(LSTMModelMLPFeatDist, self).__init__()
+
+        self.d_hid = d_hid
+        self.n_layers = n_layers
+        self.is_cuda = is_cuda
+
+        self.drop = nn.Dropout(dropout)
+
+        self.embedding = nn.Embedding(vocab, d_emb)
+        self.bilstm = BiLSTM(d_emb, d_hid, n_layers, dropout)
+
+        #(handcrafted + d_hid * directions * questions * layers)
+        self.mlp = MLP(dfeat + d_hid * 2 * 2 * n_layers, 512, 256, d_out, dropout)
+
+        self.init_weights(emb_init, hid_init, dec_init, glove_emb)
+
+
+    def init_weights(self, emb_init, hid_init, dec_init, glove_emb):
+        init_types = {'random':functools.partial(init.uniform, a=-0.1, b=0.1),
+                        'constant': functools.partial(init.constant, val=0.1),
+                        'xavier_n': init.xavier_normal,
+                        'xavier_u': init.xavier_uniform,
+                        'orthogonal': init.orthogonal}
+        if emb_init == 'glove' and glove_emb is not None:
+            self.embedding.weight.data = glove_emb
+        else:
+            init_types[emb_init](self.embedding.weight)
+
+        self.bilstm.init_weights(hid_init)
+        self.mlp.init_weights(dec_init)
+
+
+    def forward(self, X1, X2, feats):
+        X1 = Variable(X1)
+        X2 = Variable(X2)
+        feats = Variable(feats)
+
+        emb1 = self.drop(self.embedding(X1))
+        h1 = self.init_hidden(X1.size()[0])
+        hid1 = self.bilstm(emb1, h1)
+
+        emb2 = self.drop(self.embedding(X2))
+        h2 = self.init_hidden(X2.size()[0])
+        hid2 = self.bilstm(emb2, h2)
+
+        #Concatenates Hidden State Directions and Layers
+        hid1 = torch.cat(torch.chunk(hid1, hid1.size()[0]), 2)[0]
+        hid2 = torch.cat(torch.chunk(hid2, hid2.size()[0]), 2)[0]
+
+        #Calculated Cos and Euclidian Distance Between Vectors
+        dist = self.calculate_distances(hid1, hid2)
+
+        #Concatenates Question Hidden States Together
+        h_cat = torch.cat([feats, dist, hid1, hid2], 1)
+        return self.mlp(h_cat)
+
+
+    def init_hidden(self, batch_size):
+        if self.is_cuda:
+            return (Variable(torch.zeros(self.n_layers * 2, batch_size, self.d_hid).cuda()), 
+                    Variable(torch.zeros(self.n_layers * 2, batch_size, self.d_hid).cuda()))
+        else:
+            return (Variable(torch.zeros(self.n_layers * 2, batch_size, self.d_hid)), 
+                    Variable(torch.zeros(self.n_layers * 2, batch_size, self.d_hid)))
+
+    def calculate_distances(self, x1, x2):
+        dim1, dim2 = x1.size()
+        cos_dis = Variable(torch.Tensor(dim1, 1).float())
+        for d in range(dim1):
+            cos_dis[d] = torch.dot(x1[d], x2[d]) / (torch.norm(x1[d], 2) * torch.norm(x2[d], 2))
+        sum_sq = (x1-x2).pow(2).sum(1).float()
+        return torch.cat((cos_dis, sum_sq), 1)
 
 
 

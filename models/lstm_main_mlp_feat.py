@@ -5,25 +5,23 @@ import time
 import pickle as pkl
 import functools
 
-# import numpy as np
-# import pandas as pd
+import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from torch.nn.utils import clip_grad_norm
 from torch.utils.data import TensorDataset, DataLoader
+from sklearn import preprocessing
 from sklearn.metrics import log_loss
 
-# import nltk
-# nltk.download('punkt')
-# from nltk.tokenize import word_tokenize
 from nltk.stem import SnowballStemmer
 from nltk.stem.wordnet import WordNetLemmatizer
 
-from models2 import LSTMModelMLP
+from models2 import LSTMModelMLPFeat
 sys.path.append('../utils/')
 from data import TacoText
-from preprocess import load_data
+from preprocess import clean_and_tokenize, pad_and_shape
 from pipeline import pipeline
 
 
@@ -40,13 +38,13 @@ def get_glove_embeddings(file_path, corpus, ntoken, nemb):
     return embeddings
 
 
-def evaluate(model, data_loader, cuda):
+def evaluate(model, data_loader, cuda, d_in, n_feat):
 
     correct, total = 0, 0
     pred_list = []
     true_list = []
     for ind, (qs, duplicate) in enumerate(data_loader):
-        out = model(qs[:, 0, 0, :], qs[:, 0, 1, :])
+        out = model(qs[:, 0, 0, :].long(), qs[:, 0, 1, :].long(), qs[:, 0, 2, :n_feat])
         pred = out.data.max(1)[1]
         if cuda:
             pred = pred.cuda()
@@ -55,7 +53,38 @@ def evaluate(model, data_loader, cuda):
         total += len(pred)
         pred_list += list(out.exp()[:, 1].data.cpu().numpy())
         true_list += list(duplicate.cpu().numpy())
-    return (correct / total), log_loss(true_list, pred_list, eps=1e-5)
+    return (correct / total), log_loss(true_list, pred_list, eps=1e-7)
+
+def feature_gen(x):
+    f = []
+    f.append(abs(len(x[0]) - len(x[1])))  #WCDifference
+    wic = len(set(x[0]).intersection(set(x[1])))
+    f.append(wic) #NumWordsInCommon
+    uw = len(set(x[0]).union(set(x[1])))
+    f.append(uw) #Num unique words
+    f.append(wic/uw) #Jaccard
+    f.append(f[3]/len(set(x[0])))  #Pct Overlap Q1
+    f.append(int((f[3]/len(set(x[0]))) < 0.1))
+    f.append(int((f[3]/len(set(x[0]))) < 0.2))
+    f.append(int((f[3]/len(set(x[0]))) < 0.3))
+    f.append(int((f[3]/len(set(x[0]))) < 0.4))
+    f.append(int((f[3]/len(set(x[0]))) < 0.5))
+    f.append(f[3]/len(set(x[1])))  #Pct Overlap Q2
+    f.append(int((f[3]/len(set(x[1]))) < 0.1))
+    f.append(int((f[3]/len(set(x[1]))) < 0.2))
+    f.append(int((f[3]/len(set(x[1]))) < 0.3))
+    f.append(int((f[3]/len(set(x[1]))) < 0.4))
+    f.append(int((f[3]/len(set(x[1]))) < 0.5))
+    f.append(int((wic/uw) < 0.1))
+    f.append(int((wic/uw) < 0.2))
+    f.append(int((wic/uw) < 0.3))
+    f.append(int((wic/uw) < 0.4))
+    f.append(int((wic/uw) < 0.5))
+    f.append(int(x[0][0].lower() == x[1][0].lower()))
+#     for q in ('who','what','when','where','why','how','which'):
+#         f.append(int(x[0][0].lower() == q))
+#         f.append(int(x[1][0].lower() == q))
+    return f
 
 
 def main():
@@ -138,7 +167,50 @@ def main():
 
     corpus = TacoText(args.vocabsize, lower=True, vocab_pipe=pipe)
 
-    X, y, X_val, y_val = load_data(args.data, corpus, args.din, train_split=0.9)
+    print('Loading Data')
+    train_data = pd.read_csv(args.data)
+    #Shuffle order of training data
+
+    train_data = train_data.iloc[:100]
+
+    train_data = train_data.reindex(np.random.permutation(train_data.index))
+    val_data = train_data.iloc[int(len(train_data) * 0.9):]
+    train_data = train_data.iloc[:int(len(train_data) * 0.9)]
+
+    print('Cleaning and Tokenizing')
+    q1, q2, y = clean_and_tokenize(train_data, corpus)
+    q1_val, q2_val, y_val = clean_and_tokenize(val_data, corpus)
+
+    train_feat = list(map(feature_gen, zip(q1, q2)))
+    val_feat = list(map(feature_gen, zip(q1_val, q2_val)))
+    scalar = preprocessing.StandardScaler()
+    train_feat = scalar.fit_transform(train_feat)
+    val_feat = scalar.transform(val_feat)
+
+    print('Piping Data')
+    q1 = corpus.pipe_data(q1)
+    q2 = corpus.pipe_data(q2)
+    q1_val = corpus.pipe_data(q1_val)
+    q2_val = corpus.pipe_data(q2_val)
+
+    corpus.gen_vocab(q1 + q2 + q2_val + q1_val)
+
+    n_feat = train_feat.shape[1]
+    d_in = args.din
+    feat_max = int(np.max([n_feat, d_in]))
+
+    X = torch.Tensor(len(train_data), 1, 3, feat_max)
+    X[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1, feat_max)).long()
+    X[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2, feat_max)).long()
+    X[:, 0, 2, :n_feat] = torch.from_numpy(np.array(train_feat))
+    y = torch.from_numpy(np.array(y)).long()
+
+    X_val = torch.Tensor(len(val_data), 1, 3, feat_max)
+    X_val[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1_val, feat_max)).long()
+    X_val[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2_val, feat_max)).long()
+    X_val[:, 0, 2, :n_feat] = torch.from_numpy(np.array(val_feat))
+    y_val = torch.from_numpy(np.array(y_val)).long()
+
 
     if args.cuda:
         X, y = X.cuda(), y.cuda()
@@ -160,7 +232,7 @@ def main():
         assert args.demb in (50, 100, 200, 300)
         glove_embeddings = get_glove_embeddings(args.glovedata, corpus.dictionary.word2idx, ntokens, args.demb)
 
-    model = LSTMModelMLP(args.din, args.dhid, args.nlayers, args.dout, args.demb, args.vocabsize, 
+    model = LSTMModelMLPFeat(args.din, args.dhid, args.nlayers, args.dout, args.demb, n_feat, args.vocabsize, 
                         args.dropout, args.embinit, args.hidinit, args.decinit, glove_embeddings,
                         args.cuda)
 
@@ -186,7 +258,7 @@ def main():
         cur_loss = 0
         for ind, (qs, duplicate) in enumerate(train_loader):
             model.zero_grad()
-            pred = model(qs[:, 0, 0, :], qs[:, 0, 1, :])
+            pred = model(qs[:, 0, 0, :d_in].long(), qs[:, 0, 1, :d_in].long(), qs[:, 0, 2, :n_feat])
             if args.cuda:
                 pred = pred.cuda()
                 duplicate = duplicate.cuda()
@@ -215,8 +287,9 @@ def main():
                 cur_loss = 0
 
         model.eval()
-        train_acc, train_ll = evaluate(model, train_loader, args.cuda)
-        val_acc, val_ll = evaluate(model, valid_loader, args.cuda)
+
+        train_acc, train_ll = evaluate(model, train_loader, args.cuda, d_in, n_feat)
+        val_acc, val_ll = evaluate(model, valid_loader, args.cuda, d_in, n_feat)
         # if args.save and (val_acc > best_val_acc):
         if args.save and (val_ll < best_ll):
             with open(args.save + '_corpus.pkl', 'wb') as corp_f:

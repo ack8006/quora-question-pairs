@@ -87,7 +87,7 @@ def main():
                         help='upper epoch limit')
     parser.add_argument('--batchsize', type=int, default=20, metavar='N',
                         help='batch size')
-    parser.add_argument('--seed', type=int, default=42,
+    parser.add_argument('--seed', type=int, default=3,
                         help='random seed')
     parser.add_argument('--vocabsize', type=int, default=200000,
                         help='random seed')
