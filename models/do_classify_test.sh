@@ -5,7 +5,7 @@ CMD="python autoencoder_classifier_main.py \
 	--max_sentences 50000  \
         --autoencoder debug.pt \
 	--lr 0.001 \
-	--mode projection \
+	--mode distance \
 	--n_projections 50 \
 	--projection_dim 3 \
 	--demb 50 \

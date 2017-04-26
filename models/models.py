@@ -476,9 +476,12 @@ class AutoencoderClassifier(nn.Module):
             proj2 = self.projection(mu2)
             projs = torch.cat([proj1, proj2], dim=1) # Bx2P
         else:
-            projs = torch.zeros((X1.size(0), 2 * self.n_projections))
+            projs = Variable(torch.zeros((X1.size(0), 2 * self.n_projections)))
 
-        all_features = torch.cat([pdist, len1, len2, projs], dim=1)
+        all_features = torch.cat([dist, len1, len2, projs], 1)
+        print(all_features.size())
+        print(X1.size())
+        assert all_features.size(0) == X1.size(0)
         if self.use_mlp:
             res = self.mlp(all_features)
         else:

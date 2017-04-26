@@ -179,13 +179,13 @@ def main():
                 y = Variable(y)
                 model.zero_grad()
 
-                # RUN THE MODEL FOR THIS BATCH.
-                score = model(q1, q2)
-                loss = criterion(score, y)
-
                 if args.debug and first_batch:
                     print('INPUT:', q1, q2, y)
                     first_batch = False
+
+                # RUN THE MODEL FOR THIS BATCH.
+                score = model(q1, q2)
+                loss = criterion(score, y)
 
                 # Assemble the complete loss function.
                 loss.backward()
@@ -229,6 +229,11 @@ def main():
                 loss = criterion(score, y)
                 tvloss += loss.data[0]
                 batches += 1
+
+                if args.debug:
+                    # Check for cross-batch leaks
+                    scsh = model(q1[:10], q2[:10])
+                    assert score[:10] == scsh
 
                 # Create a confusion matrix.
                 pred = (score.data.numpy() > 0.5).astype(np.int32)
