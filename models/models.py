@@ -420,8 +420,64 @@ class EmbeddingAutoencoder(nn.Module):
         return tup
 
 
+class AutoencoderClassifier(nn.Module):
+    '''Uses a pre-trained EmbeddingAutoencoder to classify duplicates.
+    
+    Has 3 modes:
+        - distance: Encode sentences, decide on distance
+        - lengths: decide on 3 signals, sentence lengths + distance
+        - projections: lengths + projection lengths'''
 
+    def __init__(self, autoencoder, mode='distance', projection_dim=3,
+            n_projections=10, use_mlp=False, dropout=0.0):
+        super(AutoencoderClassifier, self).__init__()
 
+        self.mode = mode
+        self.autoencoder = autoencoder
+        # Maybe it's a good idea to lock the projection vectors at length 1.
+        self.projection_dim = projection_dim
+        self.n_projections = n_projections
+        self.use_mlp = use_mlp
+
+        d_emb = self.autoencoder.fc_squash.fc.out_features
+        self.proj = nn.Linear(d_emb, projection_dim * n_projections, bias=False)
+
+        d_all = 3 * d_emb + 2 * n_projections
+        self.fc = nn.Linear(d_all, 1)
+        self.mlp = MLP(d_all, 512, 256, 1, dropout)
+
+    def get_embedding(self, X):
+        X1 = self.autoencoder.drop(self.autoencoder.word_embedding(X1)) # B x S x D
+        hn = self.autoencoder.encoder(X1) # B x 2NH
+        mean = self.autoencoder.fc_mean(hn)
+        squash = self.autoencoder.bn_squash(self.autoencoder.fc_squash(mean))
+        return squash.detach()
+
+    def projection(self, mu):
+        cube = (mu.size(0), self.n_projections, self.projection_dim)
+        proj1 = self.proj(mu1).view(cube) # BxPxD
+        return proj1.pow(2).sum(dim=2) # BxP
+
+    def forward(self, X1, X2):
+        mu1 = self.get_embedding(X1) # BxE
+        mu2 = self.get_embedding(X2) # BxE
+        dist = (mu1 - mu2).pow(2) # BxE
+
+        len1 = mu1.pow(2) # ||mu||^2 # BxE
+        len2 = mu2.pow(2) # ||mu||^2 # BxE
+
+        if self.mode == 'projections':
+            proj1 = self.projection(mu1)
+            proj2 = self.projection(mu2)
+            projs = torch.cat([proj1, proj2], dim=1) # Bx2P
+        else:
+            projs = torch.zeros((X1.size(0), 2 * self.n_projections))
+
+        all_features = torch.cat([pdist, len1, len2, projs], dim=1)
+        if self.use_mlp:
+            return self.mlp(all_features)
+        else:
+            return self.fc(all_features)
 
 
 
