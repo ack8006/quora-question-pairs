@@ -100,7 +100,7 @@ def generate_labeled(args, triplets, qid, questions):
             batch = triplets[batch_idx:(batch_idx + args.batchsize)]
             qid1 = torch.LongTensor([rlookup[t[0]] for t in batch])
             qid2 = torch.LongTensor([rlookup[t[1]] for t in batch])
-            y = torch.ByteTensor([t[2] for t in batch])
+            y = torch.FloatTensor([t[2] for t in batch])
             q1 = questions[qid1]
             q2 = questions[qid2]
 
@@ -239,10 +239,10 @@ def main():
                 pred = (score.data.numpy() > 0.5).astype(np.int32)
                 y = y.data.numpy()
 
-                true_positives += sum(y * pred)
-                false_positives += sum((1 - y) * pred)
-                true_negatives += sum((1 - y) * (1 - pred))
-                false_negatives += sum(y * (1 - pred))
+                true_positives += np.sum(y * pred)
+                false_positives += np.sum((1 - y) * pred)
+                true_negatives += np.sum((1 - y) * (1 - pred))
+                false_negatives += np.sum(y * (1 - pred))
 
             confusion_matrix = np.array([
                 [true_positives, false_negatives],
