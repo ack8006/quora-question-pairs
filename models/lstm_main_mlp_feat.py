@@ -171,8 +171,6 @@ def main():
     train_data = pd.read_csv(args.data)
     #Shuffle order of training data
 
-    train_data = train_data.iloc[:100]
-
     train_data = train_data.reindex(np.random.permutation(train_data.index))
     val_data = train_data.iloc[int(len(train_data) * 0.9):]
     train_data = train_data.iloc[:int(len(train_data) * 0.9)]
