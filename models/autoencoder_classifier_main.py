@@ -125,6 +125,7 @@ def generate_valid(args, data):
 def main():
     data = ClassifyData(args)
     autoencoder = torch.load(args.autoencoder)
+    autoencoder.is_cuda = args.cuda
     # Lock the autoencoder
     for param in autoencoder.parameters():
         param.requires_grad = False
