@@ -4,11 +4,11 @@ CMD="python autoencoder_classifier_main.py \
 	--vocabsize 10000 \
 	--max_sentences 50000  \
         --autoencoder debug.pt \
-	--max_supplement 27000  \
 	--lr 0.001 \
 	--mode projection \
 	--n_projections 50 \
 	--projection_dim 3 \
+	--demb 50 \
 	--epochs 25 --batchsize 20 \
 	--dropout 0.5 \
 	--loginterval 20 \

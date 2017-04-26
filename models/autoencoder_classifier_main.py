@@ -21,7 +21,7 @@ import torch.nn.functional as F
 from torch.nn.utils import clip_grad_norm
 from torch.utils.data import TensorDataset, DataLoader
 
-from models import BiLSTM, EmbeddingAutoencoder
+from models import AutoencoderClassifier
 
 parser = argparse.ArgumentParser(description='Autoencoder Quora Classifier')
 parser.add_argument('--datadir', type=str, default='../data',
@@ -36,6 +36,8 @@ parser.add_argument('--din', type=int, default=30,
                     help='length of sentences')
 parser.add_argument('--vocabsize', type=int, default=20000,
                     help='how many words to get from glove')
+parser.add_argument('--demb', type=int, default=100,
+                    help='size of word embeddings')
 
 # Training parameters.
 parser.add_argument('--lr', type=float, default=0.05,
@@ -89,7 +91,7 @@ def generate_labeled(args, triplets, questions):
     def epoch():
         np.random.shuffle(triplets)
         for batch_idx in xrange(0, len(triplets), args.batchsize):
-            if batch_idx + args.batchsize > len(triplets)
+            if batch_idx + args.batchsize > len(triplets):
                 return # Do the remainder next epoch
 
             batch = triplets[batch_idx:(batch_idx + args.batchsize)]
@@ -268,7 +270,7 @@ def main():
 
             acc = (true_positives + true_negatives) / np.sum(confusion_matrix)
             print('Valid loss: {:.6f} | Valid acc: {:.6f}'
-                    .format(tvloss / batches, acc)
+                    .format(tvloss / batches, acc))
 
             with open(args.save_to, 'wb') as f:
                 torch.save(model, f)
