@@ -91,6 +91,8 @@ def main():
     parser = argparse.ArgumentParser(description='PyTorch PennTreeBank RNN/LSTM Language Model')
     parser.add_argument('--data', type=str, default='../data/train.csv',
                         help='location of the data corpus')
+    parser.add_argument('--presaved', action='store_true',
+                        help='use presaved data')
     parser.add_argument('--glovedata', type=str, default='../data/glove.6B',
                         help='location of the pretrained glove embeddings')
     parser.add_argument('--din', type=int, default=30,
@@ -149,65 +151,82 @@ def main():
                         help='path to save the final model')
     args = parser.parse_args()
 
-    pipe = None
-    if args.pipeline:
-        stemmer, lemmatizer = None, None
-        if args.stem:
-            stemmer = SnowballStemmer('english')
-        elif args.lemma:
-            lemmatizer = WordNetLemmatizer()
 
-        pipe = functools.partial(pipeline, 
-                                rm_stop_words=args.psw, 
-                                rm_punc=args.ppunc, 
-                                number_token=args.pntok, 
-                                keep_questions=args.pkq,
-                                stemmer=stemmer,
-                                lemmatizer=lemmatizer)
+    if not args.presaved:
+        pipe = None
+        if args.pipeline:
+            stemmer, lemmatizer = None, None
+            if args.stem:
+                stemmer = SnowballStemmer('english')
+            elif args.lemma:
+                lemmatizer = WordNetLemmatizer()
 
-    corpus = TacoText(args.vocabsize, lower=True, vocab_pipe=pipe)
+            pipe = functools.partial(pipeline, 
+                                    rm_stop_words=args.psw, 
+                                    rm_punc=args.ppunc, 
+                                    number_token=args.pntok, 
+                                    keep_questions=args.pkq,
+                                    stemmer=stemmer,
+                                    lemmatizer=lemmatizer)
 
-    print('Loading Data')
-    train_data = pd.read_csv(args.data)
-    #Shuffle order of training data
+        corpus = TacoText(args.vocabsize, lower=True, vocab_pipe=pipe)
+        print('Loading Data')
+        train_data = pd.read_csv(args.data)
+        #Shuffle order of training data
 
-    train_data = train_data.reindex(np.random.permutation(train_data.index))
-    val_data = train_data.iloc[int(len(train_data) * 0.9):]
-    train_data = train_data.iloc[:int(len(train_data) * 0.9)]
+        train_data = train_data.reindex(np.random.permutation(train_data.index))
+        val_data = train_data.iloc[int(len(train_data) * 0.9):]
+        train_data = train_data.iloc[:int(len(train_data) * 0.9)]
 
-    print('Cleaning and Tokenizing')
-    q1, q2, y = clean_and_tokenize(train_data, corpus)
-    q1_val, q2_val, y_val = clean_and_tokenize(val_data, corpus)
+        print('Cleaning and Tokenizing')
+        q1, q2, y = clean_and_tokenize(train_data, corpus)
+        q1_val, q2_val, y_val = clean_and_tokenize(val_data, corpus)
 
-    train_feat = list(map(feature_gen, zip(q1, q2)))
-    val_feat = list(map(feature_gen, zip(q1_val, q2_val)))
-    scalar = preprocessing.StandardScaler()
-    train_feat = scalar.fit_transform(train_feat)
-    val_feat = scalar.transform(val_feat)
+        train_feat = list(map(feature_gen, zip(q1, q2)))
+        val_feat = list(map(feature_gen, zip(q1_val, q2_val)))
+        scalar = preprocessing.StandardScaler()
+        train_feat = scalar.fit_transform(train_feat)
+        val_feat = scalar.transform(val_feat)
 
-    print('Piping Data')
-    q1 = corpus.pipe_data(q1)
-    q2 = corpus.pipe_data(q2)
-    q1_val = corpus.pipe_data(q1_val)
-    q2_val = corpus.pipe_data(q2_val)
+        print('Piping Data')
+        q1 = corpus.pipe_data(q1)
+        q2 = corpus.pipe_data(q2)
+        q1_val = corpus.pipe_data(q1_val)
+        q2_val = corpus.pipe_data(q2_val)
 
-    corpus.gen_vocab(q1 + q2 + q2_val + q1_val)
+        corpus.gen_vocab(q1 + q2 + q2_val + q1_val)
 
-    n_feat = train_feat.shape[1]
-    d_in = args.din
-    feat_max = int(np.max([n_feat, d_in]))
+        n_feat = train_feat.shape[1]
+        d_in = args.din
+        feat_max = int(np.max([n_feat, d_in]))
 
-    X = torch.Tensor(len(train_data), 1, 3, feat_max)
-    X[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1, feat_max)).long()
-    X[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2, feat_max)).long()
-    X[:, 0, 2, :n_feat] = torch.from_numpy(np.array(train_feat))
-    y = torch.from_numpy(np.array(y)).long()
+        X = torch.Tensor(len(train_data), 1, 3, feat_max)
+        X[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1, feat_max)).long()
+        X[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2, feat_max)).long()
+        X[:, 0, 2, :n_feat] = torch.from_numpy(np.array(train_feat))
+        y = torch.from_numpy(np.array(y)).long()
 
-    X_val = torch.Tensor(len(val_data), 1, 3, feat_max)
-    X_val[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1_val, feat_max)).long()
-    X_val[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2_val, feat_max)).long()
-    X_val[:, 0, 2, :n_feat] = torch.from_numpy(np.array(val_feat))
-    y_val = torch.from_numpy(np.array(y_val)).long()
+        X_val = torch.Tensor(len(val_data), 1, 3, feat_max)
+        X_val[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1_val, feat_max)).long()
+        X_val[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2_val, feat_max)).long()
+        X_val[:, 0, 2, :n_feat] = torch.from_numpy(np.array(val_feat))
+        y_val = torch.from_numpy(np.array(y_val)).long()
+
+        torch.save(X, '../data/X_feat.t')
+        torch.save(y, '../data/y_feat.t')
+        torch.save(X_val, '../data/X_val_feat.t')
+        torch.save(y_val, '../data/y_val_feat.t')
+        with open(args.save + '_corpus_feat.pkl', 'wb') as corp_f:
+            pkl.dump(corpus, corp_f, protocol=pkl.HIGHEST_PROTOCOL)
+
+    else:
+        print('Loading Presaved Data')
+        X = torch.load(args.data + 'X_feat.t')
+        y = torch.load(args.data + 'y_feat.t')
+        X_val = torch.load(args.data + 'X_val_feat.t')
+        y_val = torch.load(args.data + 'y_val_feat.t')
+        with open(args.data + 'corpus_feat.pkl', 'rb') as f:
+            corpus = pkl.load(f)
 
 
     if args.cuda:
