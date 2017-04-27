@@ -55,10 +55,10 @@ def evaluate(model, data_loader, cuda):
         pred_list += list(out.exp()[:, 1].data.cpu().numpy())
         true_list += list(duplicate.cpu().numpy())
 
-    with open("broken_pred_list.pkl", "w") as f:
-        f.write(pred_list)
-    with open("broken_true_list.pkl", "w") as f:
-        f.write(true_list)
+    with open("broken_pred_list.pkl", "wb") as f:
+        pkl.dump(pred_list, f, protocol=pkl.HIGHEST_PROTOCOL)
+    with open("broken_true_list.pkl", "wb") as f:
+        pkl.dump(true_list, f, protocol=pkl.HIGHEST_PROTOCOL)
 
     return (correct / total), log_loss(true_list, pred_list, eps=1e-5)
 
