@@ -55,11 +55,6 @@ def evaluate(model, data_loader, cuda):
         pred_list += list(out.exp()[:, 1].data.cpu().numpy())
         true_list += list(duplicate.cpu().numpy())
 
-    with open("broken_pred_list.pkl", "wb") as f:
-        pkl.dump(pred_list, f, protocol=pkl.HIGHEST_PROTOCOL)
-    with open("broken_true_list.pkl", "wb") as f:
-        pkl.dump(true_list, f, protocol=pkl.HIGHEST_PROTOCOL)
-
     return (correct / total), log_loss(true_list, pred_list, eps=1e-5)
 
 
@@ -67,6 +62,8 @@ def main():
     parser = argparse.ArgumentParser(description='PyTorch PennTreeBank RNN/LSTM Language Model')
     parser.add_argument('--data', type=str, default='../data/train.csv',
                         help='location of the data corpus')
+    parser.add_argument('--presaved', action='store_true',
+                        help='use presaved data')
     parser.add_argument('--glovedata', type=str, default='../data/glove.6B',
                         help='location of the pretrained glove embeddings')
     parser.add_argument('--din', type=int, default=30,
@@ -133,6 +130,7 @@ def main():
         elif args.lemma:
             lemmatizer = WordNetLemmatizer()
 
+    if args.presaved:
         pipe = functools.partial(pipeline, 
                                 rm_stop_words=args.psw, 
                                 rm_punc=args.ppunc, 
@@ -140,15 +138,17 @@ def main():
                                 keep_questions=args.pkq,
                                 stemmer=stemmer,
                                 lemmatizer=lemmatizer)
+        corpus = TacoText(args.vocabsize, lower=True, vocab_pipe=pipe)
+        X, y, X_val, y_val = load_data(args.data, corpus, args.din, train_split=0.9)
 
-    corpus = TacoText(args.vocabsize, lower=True, vocab_pipe=pipe)
-
-    X, y, X_val, y_val = load_data(args.data, corpus, args.din, train_split=0.9)
-
-    torch.save(X, '../data/train_x.t')
-    torch.save(y, '../data/train_y.t')
-    torch.save(X_val, '../data/val_x.t')
-    torch.save(y_val, '../data/val_y.t')
+    else:
+        print('Loading Presaved Data')
+        X = torch.load(args.data + 'train_x.t')
+        y = torch.load(args.data + 'train_y.t')
+        X_val = torch.load(args.data + 'val_x.t')
+        y_val = torch.load(args.data + 'val_y.t')
+        with open(args.data + 'corpus.pkl', 'rb') as f:
+            corpus = pkl.load(f)
 
     if args.cuda:
         X, y = X.cuda(), y.cuda()
@@ -223,15 +223,6 @@ def main():
                             elapsed * 1000.0 / args.loginterval, cur_loss))
                 start_time = time.time()
                 cur_loss = 0
-
-        with open(args.save + '_broken_corpus.pkl', 'wb') as corp_f:
-            pkl.dump(corpus, corp_f, protocol=pkl.HIGHEST_PROTOCOL)
-        torch.save(model.cpu(), args.save)
-        torch.save(model.cpu().state_dict(), args.save + "_broken.state_dict")
-        with open(args.save + "_broken.state_dict.config", "w") as f:
-            f.write(model_config)
-        if args.cuda:
-            model.cuda()
 
         model.eval()
         train_acc, train_ll = evaluate(model, train_loader, args.cuda)
