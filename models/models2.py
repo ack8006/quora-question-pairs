@@ -141,11 +141,11 @@ class LSTMModel(nn.Module):
         X1 = Variable(X1)
         X2 = Variable(X2)
 
-        emb1 = self.drop(self.embedding(X1))
+        emb1 = self.embedding(X1)
         h1 = self.init_hidden(X1.size()[0])
         hid1 = self.bilstm(emb1, h1)
 
-        emb2 = self.drop(self.embedding(X2))
+        emb2 = self.embedding(X2)
         h2 = self.init_hidden(X2.size()[0])
         hid2= self.bilstm(emb2, h2)
 
@@ -207,11 +207,11 @@ class LSTMModelMLP(nn.Module):
         X1 = Variable(X1)
         X2 = Variable(X2)
 
-        emb1 = self.drop(self.embedding(X1))
+        emb1 = self.embedding(X1)
         h1 = self.init_hidden(X1.size()[0])
         hid1 = self.bilstm(emb1, h1)
 
-        emb2 = self.drop(self.embedding(X2))
+        emb2 = self.embedding(X2)
         h2 = self.init_hidden(X2.size()[0])
         hid2= self.bilstm(emb2, h2)
 
@@ -273,11 +273,11 @@ class LSTMModelMLPFeat(nn.Module):
         X2 = Variable(X2)
         feats = Variable(feats)
 
-        emb1 = self.drop(self.embedding(X1))
+        emb1 = self.embedding(X1)
         h1 = self.init_hidden(X1.size()[0])
         hid1 = self.bilstm(emb1, h1)
 
-        emb2 = self.drop(self.embedding(X2))
+        emb2 = self.embedding(X2)
         h2 = self.init_hidden(X2.size()[0])
         hid2 = self.bilstm(emb2, h2)
 
@@ -339,11 +339,11 @@ class LSTMModelMLPFeatDist(nn.Module):
         X2 = Variable(X2)
         feats = Variable(feats)
 
-        emb1 = self.drop(self.embedding(X1))
+        emb1 = self.embedding(X1)
         h1 = self.init_hidden(X1.size()[0])
         hid1 = self.bilstm(emb1, h1)
 
-        emb2 = self.drop(self.embedding(X2))
+        emb2 = self.embedding(X2)
         h2 = self.init_hidden(X2.size()[0])
         hid2 = self.bilstm(emb2, h2)
 

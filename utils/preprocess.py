@@ -13,6 +13,7 @@ def load_data(data_path, corpus, d_in, train_split=0.90):
     '''
     print('Loading Data')
     train_data = pd.read_csv(data_path)
+    train_data = train_data.fillna('')
     #Shuffle order of training data
 
     # train_data = train_data.iloc[:1000]

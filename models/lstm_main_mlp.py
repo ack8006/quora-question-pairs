@@ -41,7 +41,6 @@ def get_glove_embeddings(file_path, corpus, ntoken, nemb):
 
 
 def evaluate(model, data_loader, cuda):
-
     correct, total = 0, 0
     pred_list = []
     true_list = []
@@ -55,6 +54,12 @@ def evaluate(model, data_loader, cuda):
         total += len(pred)
         pred_list += list(out.exp()[:, 1].data.cpu().numpy())
         true_list += list(duplicate.cpu().numpy())
+
+    with open("broken_pred_list.pkl", "w") as f:
+        f.write(pred_list)
+    with open("broken_true_list.pkl", "w") as f:
+        f.write(true_list)
+
     return (correct / total), log_loss(true_list, pred_list, eps=1e-5)
 
 
@@ -140,6 +145,15 @@ def main():
 
     X, y, X_val, y_val = load_data(args.data, corpus, args.din, train_split=0.9)
 
+    with open("../data/train_x.pkl", "w") as f:
+        f.write(X)
+    with open("../data/train_y.pkl", "w") as f:
+        f.write(y)
+    with open("../data/val_x.pkl", "w") as f:
+        f.write(X_val)
+    with open("../data/train_y.pkl", "w") as f:
+        f.write(y_val)
+
     if args.cuda:
         X, y = X.cuda(), y.cuda()
         X_val, y_val = X_val.cuda(), y_val.cuda()
@@ -213,6 +227,15 @@ def main():
                             elapsed * 1000.0 / args.loginterval, cur_loss))
                 start_time = time.time()
                 cur_loss = 0
+
+        with open(args.save + '_broken_corpus.pkl', 'wb') as corp_f:
+            pkl.dump(corpus, corp_f, protocol=pkl.HIGHEST_PROTOCOL)
+        torch.save(model.cpu(), args.save)
+        torch.save(model.cpu().state_dict(), args.save + "_broken.state_dict")
+        with open(args.save + "_broken.state_dict.config", "w") as f:
+            f.write(model_config)
+        if args.cuda:
+            model.cuda()
 
         model.eval()
         train_acc, train_ll = evaluate(model, train_loader, args.cuda)
