@@ -17,6 +17,8 @@ TODO(Abhishek):
 - Check the hyperparameters for the experiments.
 
 TODO(Cipta):
+- Finish autoencoder experiments
+- Integrate with Alex's models
 
 TODO (ALL):
 - Ensemble Best Models
