@@ -130,7 +130,7 @@ def main():
         elif args.lemma:
             lemmatizer = WordNetLemmatizer()
 
-    if args.presaved:
+    if not args.presaved:
         pipe = functools.partial(pipeline, 
                                 rm_stop_words=args.psw, 
                                 rm_punc=args.ppunc, 
