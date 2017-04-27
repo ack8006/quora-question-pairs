@@ -145,14 +145,10 @@ def main():
 
     X, y, X_val, y_val = load_data(args.data, corpus, args.din, train_split=0.9)
 
-    with open("../data/train_x.pkl", "w") as f:
-        f.write(X)
-    with open("../data/train_y.pkl", "w") as f:
-        f.write(y)
-    with open("../data/val_x.pkl", "w") as f:
-        f.write(X_val)
-    with open("../data/train_y.pkl", "w") as f:
-        f.write(y_val)
+    torch.save(X, '../data/train_x.t')
+    torch.save(y, '../data/train_y.t')
+    torch.save(X_val, '../data/val_x.t')
+    torch.save(y_val, '../data/val_y.t')
 
     if args.cuda:
         X, y = X.cuda(), y.cuda()
