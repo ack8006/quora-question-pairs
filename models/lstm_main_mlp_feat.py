@@ -220,6 +220,7 @@ def main():
             pkl.dump(corpus, corp_f, protocol=pkl.HIGHEST_PROTOCOL)
 
     else:
+        n_feat = 22
         print('Loading Presaved Data')
         X = torch.load(args.data + 'X_feat.t')
         y = torch.load(args.data + 'y_feat.t')
