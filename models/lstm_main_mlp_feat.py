@@ -226,7 +226,7 @@ def main():
         y = torch.load(args.data + 'y_feat.t')
         X_val = torch.load(args.data + 'X_val_feat.t')
         y_val = torch.load(args.data + 'y_val_feat.t')
-        with open(args.data + 'corpus_feat.pkl', 'rb') as f:
+        with open('../data/corpus_feat.pkl', 'rb') as f:
             corpus = pkl.load(f)
 
 
