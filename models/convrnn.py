@@ -98,6 +98,8 @@ class ConvRNN(nn.Module):
         enc2 = torch.max(y2_i, 1)[0][:, 0, :]
         
         s_cat = torch.cat([enc1, enc2], 1)
+        if self.is_cuda:
+            s_cat = s_cat.cuda()
 
         return self.mlp(s_cat)
 
