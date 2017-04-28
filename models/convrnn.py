@@ -40,11 +40,12 @@ class BiGRU(nn.Module):
 
 
 class ConvRNN(nn.Module):
-    def __init__(self, d_in, d_hid, d_out, d_emb, vocab, dropout, emb_init, 
+    def __init__(self, d_in, d_hid, d_out, d_emb, d_lin, vocab, dropout, emb_init, 
                     hid_init, dec_init, glove_emb, is_cuda):
         super(ConvRNN, self).__init__()
 
         self.d_hid = d_hid
+        self.d_lin = d_lin
         self.is_cuda = is_cuda
 
         self.drop = nn.Dropout(dropout)
@@ -52,8 +53,8 @@ class ConvRNN(nn.Module):
         self.embedding = nn.Embedding(vocab, d_emb)
         self.rnn = BiGRU(d_emb, d_hid, dropout)
 
-        self.linear = nn.Linear(2*d_hid + d_emb, 2*d_hid + d_emb)
-        self.mlp = MLP(4*d_hid + 2*d_emb, 512, 256, d_out, dropout)
+        self.linear = nn.Linear(2*d_hid + d_emb, d_lin)
+        self.mlp = MLP(2 * d_lin, 512, 256, d_out, dropout)
 
         self.init_weights(emb_init, hid_init, dec_init, glove_emb)
 
@@ -70,6 +71,7 @@ class ConvRNN(nn.Module):
             init_types[emb_init](self.embedding.weight)
 
         self.rnn.init_weights(hid_init)
+        self.mlp.init_weights(dec_init)
 
 
     def forward(self, X1, X2):
@@ -88,8 +90,8 @@ class ConvRNN(nn.Module):
         X1_cat = torch.cat([emb1, out1], 2)
         X2_cat = torch.cat([emb2, out2], 2)
         
-        y1_i = Variable(torch.Tensor(X1_cat.size()))
-        y2_i = Variable(torch.Tensor(X2_cat.size()))
+        y1_i = Variable(torch.Tensor(X1_cat.size(0), X1_cat.size(1), self.d_lin))
+        y2_i = Variable(torch.Tensor(X2_cat.size(0), X2_cat.size(1), self.d_lin))
         for ind in range(X1_cat.size(1)):
             y1_i[:, ind, :] = F.tanh(self.linear(X1_cat[:, ind, :]))
             y2_i[:, ind, :] = F.tanh(self.linear(X2_cat[:, ind, :]))
