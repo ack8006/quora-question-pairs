@@ -372,11 +372,11 @@ class LSTMModelMLPFeatDist(nn.Module):
         dim1 = x1.size(0)
         distances = torch.Tensor(dim1, 5).float()
         for d in range(dim1):
-            distances[d, 0] = cosine(x1[d].data.numpy(), x2[d].data.numpy())
-            distances[d, 1] = jaccard(x1[d].data.numpy(), x2[d].data.numpy())
-            distances[d, 2] = canberra(x1[d].data.numpy(), x2[d].data.numpy())
-            distances[d, 3] = minkowski(x1[d].data.numpy(), x2[d].data.numpy(), 3)
-            distances[d, 4] = braycurtis(x1[d].data.numpy(), x2[d].data.numpy())
+            distances[d, 0] = cosine(x1[d].data.cpu().numpy(), x2[d].data.cpu().numpy())
+            distances[d, 1] = jaccard(x1[d].data.cpu().numpy(), x2[d].data.cpu().numpy())
+            distances[d, 2] = canberra(x1[d].data.cpu().numpy(), x2[d].data.cpu().numpy())
+            distances[d, 3] = minkowski(x1[d].data.cpu().numpy(), x2[d].data.cpu().numpy(), 3)
+            distances[d, 4] = braycurtis(x1[d].data.cpu().numpy(), x2[d].data.cpu().numpy())
         if self.is_cuda:
             distances = distances.cuda()
         return Variable(distances)
