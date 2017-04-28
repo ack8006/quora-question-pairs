@@ -18,7 +18,7 @@ from sklearn.metrics import log_loss
 from nltk.stem import SnowballStemmer
 from nltk.stem.wordnet import WordNetLemmatizer
 
-from models2 import LSTMModelMLPFeat
+from models2 import LSTMModelMLPFeatDist
 sys.path.append('../utils/')
 from data import TacoText
 from preprocess import clean_and_tokenize, pad_and_shape
@@ -212,22 +212,22 @@ def main():
         X_val[:, 0, 2, :n_feat] = torch.from_numpy(np.array(val_feat))
         y_val = torch.from_numpy(np.array(y_val)).long()
 
-        torch.save(X, '../data/X_feat.t')
-        torch.save(y, '../data/y_feat.t')
-        torch.save(X_val, '../data/X_val_feat.t')
-        torch.save(y_val, '../data/y_val_feat.t')
-        with open(args.save + '_corpus_feat.pkl', 'wb') as corp_f:
+        torch.save(X, '../data/X_featd.t')
+        torch.save(y, '../data/y_featd.t')
+        torch.save(X_val, '../data/X_val_featd.t')
+        torch.save(y_val, '../data/y_val_featd.t')
+        with open(args.save + '_corpus_featd.pkl', 'wb') as corp_f:
             pkl.dump(corpus, corp_f, protocol=pkl.HIGHEST_PROTOCOL)
 
     else:
         n_feat = 22
         d_in = args.din
         print('Loading Presaved Data')
-        X = torch.load(args.data + 'X_feat.t')
-        y = torch.load(args.data + 'y_feat.t')
-        X_val = torch.load(args.data + 'X_val_feat.t')
-        y_val = torch.load(args.data + 'y_val_feat.t')
-        with open('../data/corpus_feat.pkl', 'rb') as f:
+        X = torch.load(args.data + 'X_featd.t')
+        y = torch.load(args.data + 'y_featd.t')
+        X_val = torch.load(args.data + 'X_val_featd.t')
+        y_val = torch.load(args.data + 'y_val_featd.t')
+        with open('../data/corpus_featd.pkl', 'rb') as f:
             corpus = pkl.load(f)
 
 
@@ -251,7 +251,7 @@ def main():
         assert args.demb in (50, 100, 200, 300)
         glove_embeddings = get_glove_embeddings(args.glovedata, corpus.dictionary.word2idx, ntokens, args.demb)
 
-    model = LSTMModelMLPFeat(args.din, args.dhid, args.nlayers, args.dout, args.demb, n_feat, args.vocabsize, 
+    model = LSTMModelMLPFeatDist(args.din, args.dhid, args.nlayers, args.dout, args.demb, n_feat, args.vocabsize, 
                         args.dropout, args.embinit, args.hidinit, args.decinit, glove_embeddings,
                         args.cuda)
 
