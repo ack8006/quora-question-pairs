@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
 from torch.autograd import Variable
+from scipy.spatial.distance import cosine, cityblock, jaccard, canberra, euclidean, minkowski, braycurtis
 
 #TODO
 '''
@@ -314,7 +315,7 @@ class LSTMModelMLPFeatDist(nn.Module):
         self.bilstm = BiLSTM(d_emb, d_hid, n_layers, dropout)
 
         #(handcrafted + d_hid * directions * questions * layers)
-        self.mlp = MLP(dfeat + d_hid * 2 * 2 * n_layers, 512, 256, d_out, dropout)
+        self.mlp = MLP(dfeat + 5 + d_hid * 2 * 2 * n_layers, 512, 256, d_out, dropout)
 
         self.init_weights(emb_init, hid_init, dec_init, glove_emb)
 
@@ -368,12 +369,17 @@ class LSTMModelMLPFeatDist(nn.Module):
                     Variable(torch.zeros(self.n_layers * 2, batch_size, self.d_hid)))
 
     def calculate_distances(self, x1, x2):
-        dim1, dim2 = x1.size()
-        cos_dis = Variable(torch.Tensor(dim1, 1).float())
+        dim1 = x1.size(0)
+        distances = torch.Tensor(dim1, 5).float()
         for d in range(dim1):
-            cos_dis[d] = torch.dot(x1[d], x2[d]) / (torch.norm(x1[d], 2) * torch.norm(x2[d], 2))
-        sum_sq = (x1-x2).pow(2).sum(1).float()
-        return torch.cat((cos_dis, sum_sq), 1)
+            distances[d, 0] = cosine(x1[d].data.numpy(), x2[d].data.numpy())
+            distances[d, 1] = jaccard(x1[d].data.numpy(), x2[d].data.numpy())
+            distances[d, 2] = canberra(x1[d].data.numpy(), x2[d].data.numpy())
+            distances[d, 3] = minkowski(x1[d].data.numpy(), x2[d].data.numpy(), 3)
+            distances[d, 4] = braycurtis(x1[d].data.numpy(), x2[d].data.numpy())
+        if self.is_cuda:
+            distances = distances.cuda()
+        return Variable(distances)
 
 
 
