@@ -11,7 +11,7 @@ from models2 import MLP
 class BiGRU(nn.Module):
     def __init__(self, d_emb, d_hid, dropout):
         super(BiGRU, self).__init__()
-        self.gru = nn.gru(d_emb, 
+        self.gru = nn.GRU(d_emb, 
                             d_hid, 
                             1,
                             bias=True,
@@ -26,8 +26,8 @@ class BiGRU(nn.Module):
 
 
     def init_weights(self, weight_init):
-    	if not weight_init:
-    		return
+        if not weight_init:
+            return
         init_types = {'random': functools.partial(init.uniform, a=-0.1, b=0.1),
                         'constant': functools.partial(init.constant, val=0.1),
                         'xavier_n': init.xavier_normal,
@@ -40,8 +40,9 @@ class BiGRU(nn.Module):
 
 
 class ConvRNN(nn.Module):
-	def __init__(self, d_in, d_hid, d_out, d_emb, vocab, dropout, emb_init, hid_init, dec_init, glove_emb, is_cuda):
-		super(ConvRNN, self).__init__()
+    def __init__(self, d_in, d_hid, d_out, d_emb, vocab, dropout, emb_init, 
+                    hid_init, dec_init, glove_emb, is_cuda):
+        super(ConvRNN, self).__init__()
 
         self.d_hid = d_hid
         self.is_cuda = is_cuda
@@ -51,8 +52,8 @@ class ConvRNN(nn.Module):
         self.embedding = nn.Embedding(vocab, d_emb)
         self.rnn = BiGRU(d_emb, d_hid, dropout)
 
-        # self.latent_linear = nn.Linear((d_emb + d_hid * 2) * 2, (d_emb + d_hid * 2) * 2)
-
+        self.linear = nn.Linear(2*d_hid + d_emb, 2*d_hid + d_emb)
+        self.mlp = MLP(4*d_hid + 2*d_emb, 512, 256, d_out, dropout)
 
         self.init_weights(emb_init, hid_init, dec_init, glove_emb)
 
@@ -77,45 +78,35 @@ class ConvRNN(nn.Module):
 
         #emb1 (batch, seq_len, embsize)
         emb1 = self.embedding(X1)
-        h1 = self.init_hidden(X1.size()[0])
+        h1 = self.init_hidden(X1.size(0))
         out1, _ = self.rnn(emb1, h1)
 
         emb2 = self.embedding(X2)
-        h2 = self.init_hidden(X2.size()[0])
+        h2 = self.init_hidden(X2.size(0))
         out2, _ = self.rnn(emb2, h2)
 
-        print('emb1: ', em1.shape(), ' out1: ', out1.shape())
+        X1_cat = torch.cat([emb1, out1], 2)
+        X2_cat = torch.cat([emb2, out2], 2)
+        
+        y1_i = Variable(torch.Tensor(X1_cat.size()))
+        y2_i = Variable(torch.Tensor(X2_cat.size()))
+        for ind in range(X1_cat.size(1)):
+            y1_i[:, ind, :] = F.tanh(self.linear(X1_cat[:, ind, :]))
+            y2_i[:, ind, :] = F.tanh(self.linear(X2_cat[:, ind, :]))
+            
+        enc1 = torch.max(y1_i, 1)[0][:, 0, :]
+        enc2 = torch.max(y2_i, 1)[0][:, 0, :]
+        
+        s_cat = torch.cat([enc1, enc2], 1)
 
-        X1_cat = torch.cat([out1.transpose(0, 1), emb1], 2)
-        X2_cat = torch.cat([out2.transpose(0, 1), emb2], 2)
-
-        #Pass X#_cat through linear layer and tanh
-        #Batch, seq_len, d_hid+d_emb+d_hid
-        y1_i
-        y2_i
-
-        #Element-wise maximum 
-        #Batch, 1, d_hid_d_emb_d_hid
-        enc1
-        enc2
-
-        # return self.mlp(torch.cat([enc1, enc2]))
-
-
-
-
-
-
-
-
-
-        #output (seq_len, batch, hidden_size * num_directions)
-
-
+        return self.mlp(s_cat)
 
 
     def init_hidden(self, batch_size):
         if self.is_cuda:
-            return (Variable(torch.zeros(self.n_layers * 2, batch_size, self.d_hid).cuda()))
+            return (Variable(torch.zeros(2, batch_size, self.d_hid).cuda()))
         else:
-            return (Variable(torch.zeros(self.n_layers * 2, batch_size, self.d_hid)))
+            return (Variable(torch.zeros(2, batch_size, self.d_hid)))
+
+
+

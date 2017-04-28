@@ -5,8 +5,6 @@ import time
 import pickle as pkl
 import functools
 
-# import numpy as np
-# import pandas as pd
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -14,13 +12,10 @@ from torch.nn.utils import clip_grad_norm
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.metrics import log_loss
 
-# import nltk
-# nltk.download('punkt')
-# from nltk.tokenize import word_tokenize
 from nltk.stem import SnowballStemmer
 from nltk.stem.wordnet import WordNetLemmatizer
 
-from models2 import LSTMModelMLP
+from convrnn import ConvRNN
 sys.path.append('../utils/')
 from data import TacoText
 from preprocess import load_data
@@ -122,24 +117,25 @@ def main():
                         help='path to save the final model')
     args = parser.parse_args()
 
-    pipe = None
-    if args.pipeline:
-        stemmer, lemmatizer = None, None
-        if args.stem:
-            stemmer = SnowballStemmer('english')
-        elif args.lemma:
-            lemmatizer = WordNetLemmatizer()
+    
 
     if not args.presaved:
-        pipe = functools.partial(pipeline, 
-                                rm_stop_words=args.psw, 
-                                rm_punc=args.ppunc, 
-                                number_token=args.pntok, 
-                                keep_questions=args.pkq,
-                                stemmer=stemmer,
-                                lemmatizer=lemmatizer)
+        pipe = None
+        if args.pipeline:
+            stemmer, lemmatizer = None, None
+            if args.stem:
+                stemmer = SnowballStemmer('english')
+            elif args.lemma:
+                lemmatizer = WordNetLemmatizer()
+            pipe = functools.partial(pipeline, 
+                                    rm_stop_words=args.psw, 
+                                    rm_punc=args.ppunc, 
+                                    number_token=args.pntok, 
+                                    keep_questions=args.pkq,
+                                    stemmer=stemmer,
+                                    lemmatizer=lemmatizer)
         corpus = TacoText(args.vocabsize, lower=True, vocab_pipe=pipe)
-        X, y, X_val, y_val = load_data(args.data, corpus, args.din, train_split=0.9)
+        X, y, X_val, y_val = load_data(args.data, corpus, args.din)
 
     else:
         print('Loading Presaved Data')
@@ -170,9 +166,9 @@ def main():
         assert args.demb in (50, 100, 200, 300)
         glove_embeddings = get_glove_embeddings(args.glovedata, corpus.dictionary.word2idx, ntokens, args.demb)
 
-    model = LSTMModelMLP(args.din, args.dhid, args.nlayers, args.dout, args.demb, args.vocabsize, 
-                        args.dropout, args.embinit, args.hidinit, args.decinit, glove_embeddings,
-                        args.cuda)
+    model = ConvRNN(args.din, args.dhid, args.dout, args.demb, args.vocabsize, 
+                        args.dropout, args.embinit, args.hidinit, args.decinit, 
+                        glove_embeddings, args.cuda)
 
     if args.cuda:
         model.cuda()

@@ -89,7 +89,7 @@ def feature_gen(x):
 
 def main():
     parser = argparse.ArgumentParser(description='PyTorch PennTreeBank RNN/LSTM Language Model')
-    parser.add_argument('--data', type=str, default='../data/train.csv',
+    parser.add_argument('--data', type=str, default='../data/',
                         help='location of the data corpus')
     parser.add_argument('--presaved', action='store_true',
                         help='use presaved data')
@@ -171,12 +171,14 @@ def main():
 
         corpus = TacoText(args.vocabsize, lower=True, vocab_pipe=pipe)
         print('Loading Data')
-        train_data = pd.read_csv(args.data)
+        # train_data = pd.read_csv(args.data)
         #Shuffle order of training data
 
-        train_data = train_data.reindex(np.random.permutation(train_data.index))
-        val_data = train_data.iloc[int(len(train_data) * 0.9):]
-        train_data = train_data.iloc[:int(len(train_data) * 0.9)]
+        # train_data = train_data.reindex(np.random.permutation(train_data.index))
+        # val_data = train_data.iloc[int(len(train_data) * 0.9):]
+        # train_data = train_data.iloc[:int(len(train_data) * 0.9)]
+        train_data = pd.read_csv('../data/train_data_shuffle.csv')
+        val_data = pd.read_csv('../data/val_data_shuffle.csv')
 
         print('Cleaning and Tokenizing')
         q1, q2, y = clean_and_tokenize(train_data, corpus)
@@ -216,7 +218,7 @@ def main():
         torch.save(y, '../data/y_featd.t')
         torch.save(X_val, '../data/X_val_featd.t')
         torch.save(y_val, '../data/y_val_featd.t')
-        with open(args.save + '_corpus_featd.pkl', 'wb') as corp_f:
+        with open('../data/corpus_featd.pkl', 'wb') as corp_f:
             pkl.dump(corpus, corp_f, protocol=pkl.HIGHEST_PROTOCOL)
 
     else:

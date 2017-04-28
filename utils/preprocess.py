@@ -5,22 +5,24 @@ from nltk.tokenize import word_tokenize
 
 
 
-def load_data(data_path, corpus, d_in, train_split=0.90):
+def load_data(data_path, corpus, d_in):
     '''
     Arguments:
     data_path - String - takes file path the train data dataframe
     d_in - INT - 
     '''
     print('Loading Data')
-    train_data = pd.read_csv(data_path)
-    train_data = train_data.fillna('')
+    train_data = pd.read_csv(data_path+'train_data_shuffle.csv')
+    val_data = pd.read_csv(data_path+'val_data_shuffle.csv')
+    # train_data = train_data.fillna('')
     #Shuffle order of training data
 
     # train_data = train_data.iloc[:1000]
+    # train_data = train_data.iloc[:100]
 
-    train_data = train_data.reindex(np.random.permutation(train_data.index))
-    val_data = train_data.iloc[int(len(train_data) * train_split):]
-    train_data = train_data.iloc[:int(len(train_data) * train_split)]
+    # train_data = train_data.reindex(np.random.permutation(train_data.index))
+    # val_data = train_data.iloc[int(len(train_data) * train_split):]
+    # train_data = train_data.iloc[:int(len(train_data) * train_split)]
 
     print('Cleaning and Tokenizing')
     q1, q2, y = clean_and_tokenize(train_data, corpus)
