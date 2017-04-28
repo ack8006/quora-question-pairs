@@ -195,9 +195,13 @@ def main():
         for ind, (qs, duplicate) in enumerate(train_loader):
             model.zero_grad()
             pred = model(qs[:, 0, 0, :], qs[:, 0, 1, :])
+            print('pred ', type(pred))
             if args.cuda:
                 pred = pred.cuda()
                 duplicate = duplicate.cuda()
+            print('pred ', type(pred))
+            print('duplicate ', type(duplicate))
+            print('qs ', type(qs))
             duplicate = Variable(duplicate)
             loss = criterion(pred, duplicate)
             loss.backward()

@@ -5,7 +5,43 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
 from torch.autograd import Variable
-from models2 import MLP
+
+
+class MLP(nn.Module):
+    def __init__(self, d_in, d_hid1, d_hid2, d_out, dropout):
+        super(MLP, self).__init__()
+        self.dropout = dropout
+
+        # self.bn1 = nn.BatchNorm1d(d_in)
+        self.linear1 = nn.Linear(d_in, d_hid1, bias=True)
+        # self.bn2 = nn.BatchNorm1d(d_hid1)
+        self.linear2 = nn.Linear(d_hid1, d_hid2, bias=True)
+        # self.bn3 = nn.BatchNorm1d(d_hid2)
+        self.linear3 = nn.Linear(d_hid2, d_out, bias=True)
+
+
+    def forward(self, X):
+        # X = self.bn1(X)
+        X = self.linear1(X)
+        X = F.dropout(F.leaky_relu(X, negative_slope=1 / 5.5), p=self.dropout)
+        # X = self.bn2(X)
+        X = self.linear2(X)
+        X = F.dropout(F.leaky_relu(X, negative_slope=1 / 5.5), p=self.dropout)
+        # X = self.bn3(X)
+        X = self.linear3(X)
+        return F.log_softmax(X)
+
+
+    def init_weights(self, weight_init):
+        init_types = {'random':functools.partial(init.uniform, a=-0.1, b=0.1),
+                        'constant': functools.partial(init.constant, val=0.1),
+                        'xavier_n': init.xavier_normal,
+                        'xavier_u': init.xavier_uniform,
+                        'orthogonal': init.orthogonal}
+
+        init_types[weight_init](self.linear1.weight)
+        init_types[weight_init](self.linear2.weight)
+        init_types[weight_init](self.linear3.weight)
 
 
 class BiGRU(nn.Module):
@@ -92,6 +128,10 @@ class ConvRNN(nn.Module):
         
         y1_i = Variable(torch.Tensor(X1_cat.size(0), X1_cat.size(1), self.d_lin))
         y2_i = Variable(torch.Tensor(X2_cat.size(0), X2_cat.size(1), self.d_lin))
+        if self.is_cuda:
+            y1_i = y1_i.cuda()
+            y2_i = y2_i.cuda()
+
         for ind in range(X1_cat.size(1)):
             y1_i[:, ind, :] = F.tanh(self.linear(X1_cat[:, ind, :]))
             y2_i[:, ind, :] = F.tanh(self.linear(X2_cat[:, ind, :]))
