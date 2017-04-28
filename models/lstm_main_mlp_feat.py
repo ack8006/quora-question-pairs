@@ -221,6 +221,7 @@ def main():
 
     else:
         n_feat = 22
+        d_in = args.din
         print('Loading Presaved Data')
         X = torch.load(args.data + 'X_feat.t')
         y = torch.load(args.data + 'y_feat.t')
