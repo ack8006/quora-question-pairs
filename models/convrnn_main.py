@@ -63,10 +63,12 @@ def main():
                         help='location of the pretrained glove embeddings')
     parser.add_argument('--din', type=int, default=30,
                         help='length of LSTM')
-    parser.add_argument('--demb', type=int, default=100,
+    parser.add_argument('--demb', type=int, default=300,
                         help='size of word embeddings')
-    parser.add_argument('--dhid', type=int, default=100,
-                        help='humber of hidden units per layer')
+    parser.add_argument('--dhid', type=int, default=300,
+                        help='number of hidden units per layer')
+    parser.add_argument('--dlin', type=int, default=500,
+                        help='number linear transformation nodes')
     parser.add_argument('--dout', type=int, default=2,
                         help='number of output classes')
     parser.add_argument('--nlayers', type=int, default=1,
@@ -166,7 +168,7 @@ def main():
         assert args.demb in (50, 100, 200, 300)
         glove_embeddings = get_glove_embeddings(args.glovedata, corpus.dictionary.word2idx, ntokens, args.demb)
 
-    model = ConvRNN(args.din, args.dhid, args.dout, args.demb, args.vocabsize, 
+    model = ConvRNN(args.din, args.dhid, args.dout, args.demb, args.dlin, args.vocabsize, 
                         args.dropout, args.embinit, args.hidinit, args.decinit, 
                         glove_embeddings, args.cuda)
 
@@ -176,11 +178,11 @@ def main():
     criterion = nn.NLLLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, 
+    model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, args.dlin,
                         args.embinit, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize,
                         args.pipeline, args.psw, args.ppunc, args.pntok, args.pkq, args.stem, args.lemma)])
 
-    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize | pipeline | stop | punc | ntoken | keep_ques | stem | lemma')
+    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | LinearDim | EncoderInit | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize | pipeline | stop | punc | ntoken | keep_ques | stem | lemma')
     print(model_config)
 
     # best_val_acc = 0.78
