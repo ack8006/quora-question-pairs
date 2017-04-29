@@ -11,25 +11,25 @@ class MLP(nn.Module):
     def __init__(self, d_in, d_hid1, d_hid2, d_out, dropout):
         super(MLP, self).__init__()
         self.dropout = dropout
+        print('MLP Dropout: ', dropout)
 
-        # self.bn1 = nn.BatchNorm1d(d_in)
-        self.linear1 = nn.Linear(d_in, d_hid1, bias=True)
-        # self.bn2 = nn.BatchNorm1d(d_hid1)
-        self.linear2 = nn.Linear(d_hid1, d_hid2, bias=True)
-        # self.bn3 = nn.BatchNorm1d(d_hid2)
-        self.linear3 = nn.Linear(d_hid2, d_out, bias=True)
+        self.linear1 = nn.Linear(d_in, d_hid1)
+        self.linear2 = nn.Linear(d_hid1, d_hid2)
+        self.linear3 = nn.Linear(d_hid2, d_out)
+
+        self.mlp = nn.Sequential()
+        self.mlp.add_module('linear1', self.linear1)
+        self.mlp.add_module('relu1', nn.LeakyReLU(negative_slope=0.18))
+        self.mlp.add_module('drop2', nn.Dropout(p=dropout))
+        self.mlp.add_module('linear2', self.linear2)
+        self.mlp.add_module('relu2', nn.LeakyReLU(negative_slope=0.18))
+        self.mlp.add_module('drop3', nn.Dropout(p=dropout))
+        self.mlp.add_module('linear3', self.linear3)
+        self.mlp.add_module('logsoft', nn.LogSoftmax())
 
 
     def forward(self, X):
-        # X = self.bn1(X)
-        X = self.linear1(X)
-        X = F.dropout(F.leaky_relu(X, negative_slope=1 / 5.5), p=self.dropout)
-        # X = self.bn2(X)
-        X = self.linear2(X)
-        X = F.dropout(F.leaky_relu(X, negative_slope=1 / 5.5), p=self.dropout)
-        # X = self.bn3(X)
-        X = self.linear3(X)
-        return F.log_softmax(X)
+        return self.mlp(X)
 
 
     def init_weights(self, weight_init):
@@ -45,20 +45,20 @@ class MLP(nn.Module):
 
 
 class BiGRU(nn.Module):
-    def __init__(self, d_emb, d_hid, dropout):
+    def __init__(self, d_emb, d_hid, dropout, bidirectional):
         super(BiGRU, self).__init__()
+        print('BiGRU Dropout: ', dropout)
         self.gru = nn.GRU(d_emb, 
                             d_hid, 
                             1,
                             bias=True,
                             batch_first=True, 
-                            bidirectional=True,
+                            bidirectional=bidirectional,
                             dropout=dropout)
 
 
     def forward(self, x, h):
-        out, hid = self.gru(x, h)
-        return out, hid
+        return self.gru(x, h)
 
 
     def init_weights(self, weight_init):
@@ -75,21 +75,57 @@ class BiGRU(nn.Module):
                     init_types[weight_init](getattr(self.gru, w))
 
 
+class BiLSTM(nn.Module):
+    def __init__(self, d_emb, d_hid, dropout, bidirectional):
+        super(BiLSTM, self).__init__()
+        print('LSTM Dropout: ', dropout)
+        self.lstm = nn.LSTM(d_emb, 
+                            d_hid, 
+                            1,
+                            bias=True,
+                            batch_first=True, 
+                            bidirectional=bidirectional,
+                            dropout=dropout)
+
+
+    def forward(self, x, h):
+        out, (hid, cell) = self.lstm(x, h)
+        #out, hidden, cell
+        return out, hid
+
+
+    def init_weights(self, weight_init):
+        init_types = {'random':functools.partial(init.uniform, a=-0.1, b=0.1),
+                        'constant': functools.partial(init.constant, val=0.1),
+                        'xavier_n': init.xavier_normal,
+                        'xavier_u': init.xavier_uniform,
+                        'orthogonal': init.orthogonal}
+        for layer in self.lstm._all_weights:
+            for w in layer:
+                if 'bias' not in w:
+                    init_types[weight_init](getattr(self.lstm, w))
+
+
 class ConvRNN(nn.Module):
     def __init__(self, d_in, d_hid, d_out, d_emb, d_lin, vocab, dropout, emb_init, 
-                    hid_init, dec_init, glove_emb, is_cuda):
+                    hid_init, dec_init, glove_emb, is_cuda, rnn, bidirectional):
         super(ConvRNN, self).__init__()
 
         self.d_hid = d_hid
         self.d_lin = d_lin
         self.is_cuda = is_cuda
-
-        self.drop = nn.Dropout(dropout)
+        self.dir = 1
+        if bidirectional:
+            self.dir = 2
+        self.rnn_type = rnn
 
         self.embedding = nn.Embedding(vocab, d_emb)
-        self.rnn = BiGRU(d_emb, d_hid, dropout)
+        if rnn == 'gru':
+            self.rnn = BiGRU(d_emb, d_hid, dropout, bidirectional)
+        elif rnn == 'lstm':
+            self.rnn = BiLSTM(d_emb, d_hid, dropout, bidirectional)
 
-        self.linear = nn.Linear(2*d_hid + d_emb, d_lin)
+        self.linear = nn.Linear(self.dir * d_hid + d_emb, d_lin)
         self.mlp = MLP(2 * d_lin, 512, 256, d_out, dropout)
 
         self.init_weights(emb_init, hid_init, dec_init, glove_emb)
@@ -148,9 +184,17 @@ class ConvRNN(nn.Module):
 
     def init_hidden(self, batch_size):
         if self.is_cuda:
-            return (Variable(torch.zeros(2, batch_size, self.d_hid).cuda()))
+            if self.rnn_type == 'lstm':
+                return (Variable(torch.zeros(self.dir * 2, batch_size, self.d_hid).cuda()), 
+                        Variable(torch.zeros(self.dir * 2, batch_size, self.d_hid).cuda()))
+            elif self.rnn_type == 'gru':
+                return (Variable(torch.zeros(2, batch_size, self.d_hid).cuda()))
         else:
-            return (Variable(torch.zeros(2, batch_size, self.d_hid)))
+            if self.rnn_type == 'lstm':
+                return (Variable(torch.zeros(self.dir * 2, batch_size, self.d_hid)), 
+                        Variable(torch.zeros(self.dir * 2, batch_size, self.d_hid)))
+            elif self.rnn_type == 'gru':
+                return (Variable(torch.zeros(2, batch_size, self.d_hid)))
 
 
 

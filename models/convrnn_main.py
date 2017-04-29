@@ -85,6 +85,8 @@ def main():
                         help='recurrent hidden weight initialization type')
     parser.add_argument('--dropout', type=float, default=0.0,
                         help='dropout applied to layers (0 = no dropout)')
+    parser.add_argument('--rnn', type=str, default='lstm',
+                        help='lstm or gru')
     parser.add_argument('--epochs', type=int, default=40,
                         help='upper epoch limit')
     parser.add_argument('--batchsize', type=int, default=20, metavar='N',
@@ -109,6 +111,8 @@ def main():
                         help='use stemmer')
     parser.add_argument('--lemma', action='store_true',
                         help='use lemmatizer')
+    parser.add_argument('--bidir', action='store_false',
+                        help='bidirectional')
     parser.add_argument('--freezeemb', action='store_false',
                         help='freezes embeddings')
     parser.add_argument('--cuda', action='store_true',
@@ -170,7 +174,7 @@ def main():
 
     model = ConvRNN(args.din, args.dhid, args.dout, args.demb, args.dlin, args.vocabsize, 
                         args.dropout, args.embinit, args.hidinit, args.decinit, 
-                        glove_embeddings, args.cuda)
+                        glove_embeddings, args.cuda, args.rnn, args.bidir)
 
     if args.cuda:
         model.cuda()
@@ -178,11 +182,11 @@ def main():
     criterion = nn.NLLLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, args.dlin,
+    model_config = '\t'.join([str(x) for x in (torch.__version__, args.rnn, args.bidir, args.clip, args.nlayers, args.din, args.demb, args.dhid, args.dlin,
                         args.embinit, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize,
                         args.pipeline, args.psw, args.ppunc, args.pntok, args.pkq, args.stem, args.lemma)])
 
-    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | LinearDim | EncoderInit | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize | pipeline | stop | punc | ntoken | keep_ques | stem | lemma')
+    print('Pytorch | RNN  | BiDir | Clip | #Layers | InSize | EmbDim | HiddenDim | LinearDim | EncoderInit | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize | pipeline | stop | punc | ntoken | keep_ques | stem | lemma')
     print(model_config)
 
     # best_val_acc = 0.78
