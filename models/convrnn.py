@@ -185,16 +185,16 @@ class ConvRNN(nn.Module):
     def init_hidden(self, batch_size):
         if self.is_cuda:
             if self.rnn_type == 'lstm':
-                return (Variable(torch.zeros(self.dir * 2, batch_size, self.d_hid).cuda()), 
-                        Variable(torch.zeros(self.dir * 2, batch_size, self.d_hid).cuda()))
+                return (Variable(torch.zeros(self.dir, batch_size, self.d_hid).cuda()), 
+                        Variable(torch.zeros(self.dir, batch_size, self.d_hid).cuda()))
             elif self.rnn_type == 'gru':
-                return (Variable(torch.zeros(2, batch_size, self.d_hid).cuda()))
+                return (Variable(torch.zeros(self.dir, batch_size, self.d_hid).cuda()))
         else:
             if self.rnn_type == 'lstm':
-                return (Variable(torch.zeros(self.dir * 2, batch_size, self.d_hid)), 
-                        Variable(torch.zeros(self.dir * 2, batch_size, self.d_hid)))
+                return (Variable(torch.zeros(self.dir, batch_size, self.d_hid)), 
+                        Variable(torch.zeros(self.dir, batch_size, self.d_hid)))
             elif self.rnn_type == 'gru':
-                return (Variable(torch.zeros(2, batch_size, self.d_hid)))
+                return (Variable(torch.zeros(self.dir, batch_size, self.d_hid)))
 
 
 class ConvRNNFeat(nn.Module):
@@ -277,16 +277,16 @@ class ConvRNNFeat(nn.Module):
     def init_hidden(self, batch_size):
         if self.is_cuda:
             if self.rnn_type == 'lstm':
-                return (Variable(torch.zeros(self.dir * 2, batch_size, self.d_hid).cuda()), 
-                        Variable(torch.zeros(self.dir * 2, batch_size, self.d_hid).cuda()))
+                return (Variable(torch.zeros(self.dir, batch_size, self.d_hid).cuda()), 
+                        Variable(torch.zeros(self.dir, batch_size, self.d_hid).cuda()))
             elif self.rnn_type == 'gru':
-                return (Variable(torch.zeros(2, batch_size, self.d_hid).cuda()))
+                return (Variable(torch.zeros(self.dir, batch_size, self.d_hid).cuda()))
         else:
             if self.rnn_type == 'lstm':
-                return (Variable(torch.zeros(self.dir * 2, batch_size, self.d_hid)), 
-                        Variable(torch.zeros(self.dir * 2, batch_size, self.d_hid)))
+                return (Variable(torch.zeros(self.dir, batch_size, self.d_hid)), 
+                        Variable(torch.zeros(self.dir, batch_size, self.d_hid)))
             elif self.rnn_type == 'gru':
-                return (Variable(torch.zeros(2, batch_size, self.d_hid)))
+                return (Variable(torch.zeros(self.dir, batch_size, self.d_hid)))
 
 
 

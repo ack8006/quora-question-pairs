@@ -142,6 +142,12 @@ def main():
                                     lemmatizer=lemmatizer)
         corpus = TacoText(args.vocabsize, lower=True, vocab_pipe=pipe)
         X, y, X_val, y_val = load_data(args.data, corpus, args.din)
+        torch.save(X, '../data/X_crnn.t')
+        torch.save(y, '../data/y_crnn.t')
+        torch.save(X_val, '../data/X_val_crnn.t')
+        torch.save(y_val, '../data/y_val_crnn.t')
+        with open(args.save + '_corpus_crnn.pkl', 'wb') as corp_f:
+            pkl.dump(corpus, corp_f, protocol=pkl.HIGHEST_PROTOCOL)
 
     else:
         print('Loading Presaved Data')
