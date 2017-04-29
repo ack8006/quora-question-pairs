@@ -197,4 +197,96 @@ class ConvRNN(nn.Module):
                 return (Variable(torch.zeros(2, batch_size, self.d_hid)))
 
 
+class ConvRNNFeat(nn.Module):
+    def __init__(self, d_in, d_hid, d_out, d_emb, d_lin, vocab, dropout, emb_init, 
+                    hid_init, dec_init, glove_emb, is_cuda, rnn, bidirectional, nfeat):
+        super(ConvRNNFeat, self).__init__()
+
+        self.d_hid = d_hid
+        self.d_lin = d_lin
+        self.is_cuda = is_cuda
+        self.dir = 1
+        if bidirectional:
+            self.dir = 2
+        self.rnn_type = rnn
+
+        self.embedding = nn.Embedding(vocab, d_emb)
+        if rnn == 'gru':
+            self.rnn = BiGRU(d_emb, d_hid, dropout, bidirectional)
+        elif rnn == 'lstm':
+            self.rnn = BiLSTM(d_emb, d_hid, dropout, bidirectional)
+
+        self.linear = nn.Linear(self.dir * d_hid + d_emb, d_lin)
+        self.mlp = MLP(nfeat + 2 * d_lin, 512, 256, d_out, dropout)
+
+        self.init_weights(emb_init, hid_init, dec_init, glove_emb)
+
+
+    def init_weights(self, emb_init, hid_init, dec_init, glove_emb):
+        init_types = {'random':functools.partial(init.uniform, a=-0.1, b=0.1),
+                        'constant': functools.partial(init.constant, val=0.1),
+                        'xavier_n': init.xavier_normal,
+                        'xavier_u': init.xavier_uniform,
+                        'orthogonal': init.orthogonal}
+        if emb_init == 'glove' and glove_emb is not None:
+            self.embedding.weight.data = glove_emb
+        else:
+            init_types[emb_init](self.embedding.weight)
+
+        self.rnn.init_weights(hid_init)
+        self.mlp.init_weights(dec_init)
+
+
+    def forward(self, X1, X2, feat):
+        X1 = Variable(X1)
+        X2 = Variable(X2)
+        feat = Variable(feat)
+
+        #emb1 (batch, seq_len, embsize)
+        emb1 = self.embedding(X1)
+        h1 = self.init_hidden(X1.size(0))
+        out1, _ = self.rnn(emb1, h1)
+
+        emb2 = self.embedding(X2)
+        h2 = self.init_hidden(X2.size(0))
+        out2, _ = self.rnn(emb2, h2)
+
+        X1_cat = torch.cat([emb1, out1], 2)
+        X2_cat = torch.cat([emb2, out2], 2)
+        
+        y1_i = Variable(torch.Tensor(X1_cat.size(0), X1_cat.size(1), self.d_lin))
+        y2_i = Variable(torch.Tensor(X2_cat.size(0), X2_cat.size(1), self.d_lin))
+        if self.is_cuda:
+            y1_i = y1_i.cuda()
+            y2_i = y2_i.cuda()
+
+        for ind in range(X1_cat.size(1)):
+            y1_i[:, ind, :] = F.tanh(self.linear(X1_cat[:, ind, :]))
+            y2_i[:, ind, :] = F.tanh(self.linear(X2_cat[:, ind, :]))
+            
+        enc1 = torch.max(y1_i, 1)[0][:, 0, :]
+        enc2 = torch.max(y2_i, 1)[0][:, 0, :]
+        
+        s_cat = torch.cat([feat, enc1, enc2], 1)
+        if self.is_cuda:
+            s_cat = s_cat.cuda()
+
+        return self.mlp(s_cat)
+
+
+    def init_hidden(self, batch_size):
+        if self.is_cuda:
+            if self.rnn_type == 'lstm':
+                return (Variable(torch.zeros(self.dir * 2, batch_size, self.d_hid).cuda()), 
+                        Variable(torch.zeros(self.dir * 2, batch_size, self.d_hid).cuda()))
+            elif self.rnn_type == 'gru':
+                return (Variable(torch.zeros(2, batch_size, self.d_hid).cuda()))
+        else:
+            if self.rnn_type == 'lstm':
+                return (Variable(torch.zeros(self.dir * 2, batch_size, self.d_hid)), 
+                        Variable(torch.zeros(self.dir * 2, batch_size, self.d_hid)))
+            elif self.rnn_type == 'gru':
+                return (Variable(torch.zeros(2, batch_size, self.d_hid)))
+
+
 
