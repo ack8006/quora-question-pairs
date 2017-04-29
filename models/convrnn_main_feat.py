@@ -109,6 +109,8 @@ def main():
                         help='number of layers')
     parser.add_argument('--lr', type=float, default=0.001,
                         help='initial learning rate')
+    parser.add_argument('--wd', type=float, default=0.0,
+                        help='adam l2 weight decay')
     parser.add_argument('--clip', type=float, default=0.25,
                         help='gradient clipping')
     parser.add_argument('--embinit', type=str, default='random',
@@ -265,13 +267,13 @@ def main():
         model.cuda()
 
     criterion = nn.NLLLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.wd)
 
     model_config = '\t'.join([str(x) for x in (torch.__version__, args.rnn, args.bidir, args.clip, args.nlayers, args.din, args.demb, args.dhid, args.dlin,
-                        args.embinit, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize,
+                        args.embinit, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.wd, args.vocabsize,
                         args.pipeline, args.psw, args.ppunc, args.pntok, args.pkq, args.stem, args.lemma)])
 
-    print('Pytorch | RNN  | BiDir | Clip | #Layers | InSize | EmbDim | HiddenDim | LinearDim | EncoderInit | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize | pipeline | stop | punc | ntoken | keep_ques | stem | lemma')
+    print('Pytorch | RNN  | BiDir | Clip | #Layers | InSize | EmbDim | HiddenDim | LinearDim | EncoderInit | DecoderInit | WeightInit | Dropout | Optimizer| LR | WeightDecay | VocabSize | pipeline | stop | punc | ntoken | keep_ques | stem | lemma')
     print(model_config)
 
     # best_val_acc = 0.78
