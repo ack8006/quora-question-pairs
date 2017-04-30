@@ -21,7 +21,7 @@ def fit_extractor(data, max_n_features, min_df, max_df, ngram_range):
     char_extractor = CountVectorizer(max_df=max_df, min_df=min_df, max_features=max_n_features, 
                                       analyzer='char', ngram_range=ngram_range, 
                                       binary=True, lowercase=True)
-    char_extractor.fit(pd.concat((data.loc[:,'question1'], data.loc[:,'question2'])).unique())
+    char_extractor.fit(pd.concat((data.loc[:,'question1'], data.loc[:,'question2'])).unique().astype('U'))
     return char_extractor
 
 def transform_data(extractor, data, test=False):
