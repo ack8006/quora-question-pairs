@@ -92,8 +92,8 @@ def main():
     train_data = pd.read_csv('../data/train.csv')
     test_data = pd.read_csv('../data/test.csv')
 
-    train_data = train_data.iloc[:100]
-    test_data = test_data.iloc[:100]
+    # train_data = train_data.iloc[:100]
+    # test_data = test_data.iloc[:100]
 
     print('Extracting Features')
     print(300000, 50, 0.999, (1,10))
