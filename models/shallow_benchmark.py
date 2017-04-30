@@ -91,6 +91,10 @@ def main():
 
     train_data = pd.read_csv('../data/train.csv')
     test_data = pd.read_csv('../data/test.csv')
+    train_data = train_data.fillna(' ')
+    test_data = test_data.fillna(' ')
+    # train_data = train_data.dropna(how="any").reset_index(drop=True)
+    # test_data = test_data.dropna(how="any").reset_index(drop=True)
 
     # train_data = train_data.iloc[:100]
     # test_data = test_data.iloc[:100]
