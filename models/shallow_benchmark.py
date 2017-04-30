@@ -114,7 +114,8 @@ def main():
     char_extractor = fit_extractor(train_data, 100000, 50, 0.999, (1,5))
 
     print('Transforming Data')
-    X_train, y_train = transform_data(char_extractor, train_data, test=True)
+    X_train, y_train = transform_data(char_extractor, train_data)
+    X_test, y_test = transform_data(char_extractor, test_data, test=True)
     with open('../data/test_X_100k.pkl', 'wb') as f:
         pkl.dump(X_test, f, protocol=pkl.HIGHEST_PROTOCOL)
 
