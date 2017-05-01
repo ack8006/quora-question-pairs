@@ -108,6 +108,8 @@ def main():
     X_test, y_test = transform_data(char_extractor, test_data, test=True)
     with open('../data/train_X_300k.pkl', 'wb') as f:
         pkl.dump(X_train, f, protocol=pkl.HIGHEST_PROTOCOL)
+    with open('../data/train_y_300k.pkl', 'wb') as f:
+        pkl.dump(y_train, f, protocol=pkl.HIGHEST_PROTOCOL)
     with open('../data/test_X_300k.pkl', 'wb') as f:
         pkl.dump(X_test, f, protocol=pkl.HIGHEST_PROTOCOL)
     del train_data, test_data, X_test, y_test
@@ -130,6 +132,8 @@ def main():
     X_test, y_test = transform_data(char_extractor, test_data, test=True)
     with open('../data/train_X_100k.pkl', 'wb') as f:
         pkl.dump(X_train, f, protocol=pkl.HIGHEST_PROTOCOL)
+    with open('../data/train_y_100k.pkl', 'wb') as f:
+        pkl.dump(y_train, f, protocol=pkl.HIGHEST_PROTOCOL)
     with open('../data/test_X_100k.pkl', 'wb') as f:
         pkl.dump(X_test, f, protocol=pkl.HIGHEST_PROTOCOL)
     del train_data, test_data, X_test, y_test
