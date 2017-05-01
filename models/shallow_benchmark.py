@@ -106,12 +106,20 @@ def main():
     print('Transforming Data')
     X_train, y_train = transform_data(char_extractor, train_data)
     X_test, y_test = transform_data(char_extractor, test_data, test=True)
+    with open('../data/train_X_300k.pkl', 'wb') as f:
+        pkl.dump(X_train, f, protocol=pkl.HIGHEST_PROTOCOL)
     with open('../data/test_X_300k.pkl', 'wb') as f:
         pkl.dump(X_test, f, protocol=pkl.HIGHEST_PROTOCOL)
+    del train_data, test_data, X_test, y_test
 
     run_circut(X_train, y_train, 300000)
 
     print('*' * 88)
+
+    train_data = pd.read_csv('../data/train.csv')
+    test_data = pd.read_csv('../data/test.csv')
+    train_data = train_data.fillna(' ')
+    test_data = test_data.fillna(' ')
 
     print('Extracting Features')
     print(100000, 50, 0.999, (1,5))
@@ -120,8 +128,11 @@ def main():
     print('Transforming Data')
     X_train, y_train = transform_data(char_extractor, train_data)
     X_test, y_test = transform_data(char_extractor, test_data, test=True)
+    with open('../data/train_X_100k.pkl', 'wb') as f:
+        pkl.dump(X_train, f, protocol=pkl.HIGHEST_PROTOCOL)
     with open('../data/test_X_100k.pkl', 'wb') as f:
         pkl.dump(X_test, f, protocol=pkl.HIGHEST_PROTOCOL)
+    del train_data, test_data, X_test, y_test
 
     run_circut(X_train, y_train, 100000)
     
