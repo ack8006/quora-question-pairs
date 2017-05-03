@@ -88,6 +88,8 @@ def main():
                         help='recurrent hidden weight initialization type')
     parser.add_argument('--dropout', type=float, default=0.0,
                         help='dropout applied to layers (0 = no dropout)')
+    parser.add_argument('--reweight', action='store_true',
+                        help='reweight loss function')
     parser.add_argument('--epochs', type=int, default=40,
                         help='upper epoch limit')
     parser.add_argument('--batchsize', type=int, default=20, metavar='N',
@@ -177,14 +179,17 @@ def main():
     if args.cuda:
         model.cuda()
 
-    criterion = nn.NLLLoss()
+    if args.reweight:
+        criterion = nn.NLLLoss(weight=torch.Tensor([1.309028344, 0.472001959]))
+    else:
+        criterion = nn.NLLLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, 
-                        args.embinit, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize,
+                        args.embinit, args.decinit, args.hidinit, args.dropout, args.optimizer, args.reweight, args.lr, args.vocabsize,
                         args.pipeline, args.psw, args.ppunc, args.pntok, args.pkq, args.stem, args.lemma)])
 
-    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize | pipeline | stop | punc | ntoken | keep_ques | stem | lemma')
+    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | DecoderInit | WeightInit | Dropout | Optimizer | Reweight | LR | VocabSize | pipeline | stop | punc | ntoken | keep_ques | stem | lemma')
     print(model_config)
 
     # best_val_acc = 0.78
