@@ -205,6 +205,8 @@ def main():
                             help='initial learning rate')
     parser.add_argument('--upsample', type=float, default=0.0,
                             help='initial learning rate')
+    parser.add_argument('--save', type=str, default='XGB',
+                        help='save_file_names')
     args = parser.parse_args()
 
     df_train = pd.read_csv('../data/train_features.csv', encoding="ISO-8859-1")
@@ -268,10 +270,10 @@ def main():
     params['objective'] = 'binary:logistic'
     params['eval_metric'] = 'logloss'
     params['eta'] = 0.02
-    params['max_depth'] = 5
+    params['max_depth'] = 7
     params['subsample'] = 0.6
     params['base_score'] = 0.2
-    params['scale_pos_weight'] = 0.2
+    # params['scale_pos_weight'] = 0.2
 
     d_train = xgb.DMatrix(x_train, label=y_train)
     d_valid = xgb.DMatrix(x_valid, label=y_valid)
@@ -304,10 +306,11 @@ def main():
     else:
         bst = xgb.train(params, d_train, 2500, watchlist, early_stopping_rounds=50, verbose_eval=50)
         print(log_loss(y_valid, bst.predict(d_valid)))
-        bst.save_model('XGB_handcrafted_5_06.mdl')
+        bst.save_model(args.save+'.mdl')
 
 
     if not args.debug:
+        print('Building Test Features')
         df_test = pd.read_csv('../data/test_features.csv', encoding = "ISO-8859-1")
         x_test_ab = df_test.iloc[:, 2:-1]
         x_test_ab = x_test_ab.drop('euclidean_distance', axis=1)
@@ -326,7 +329,7 @@ def main():
         sub = pd.DataFrame()
         sub['test_id'] = df_test['test_id']
         sub['is_duplicate'] = p_test
-        sub.to_csv('../predictions/4_xgb.csv')
+        sub.to_csv('../predictions/'+args.save+'.csv')
 
 if __name__ == '__main__':
     main()
