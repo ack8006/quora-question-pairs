@@ -196,7 +196,7 @@ def main():
     print(model_config)
 
     # best_val_acc = 0.78
-    best_ll = 0.42
+    best_ll = 0.48
     for epoch in range(args.epochs):
         model.train()
         total_cost = 0
