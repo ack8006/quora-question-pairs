@@ -268,9 +268,10 @@ def main():
     params['objective'] = 'binary:logistic'
     params['eval_metric'] = 'logloss'
     params['eta'] = 0.02
-    params['max_depth'] = 4
-    params['subsample'] = 1.0
+    params['max_depth'] = 5
+    params['subsample'] = 0.6
     params['base_score'] = 0.2
+    params['scale_pos_weight'] = 0.2
 
     d_train = xgb.DMatrix(x_train, label=y_train)
     d_valid = xgb.DMatrix(x_valid, label=y_valid)
@@ -280,24 +281,30 @@ def main():
     results = {}
     if args.grid:
         best_ll, best_key = 999, None
-        for md in (4,5,6):
+        for md in (5,6,7,8,9):
             for ss in (0.4, 0.6, 0.8, 1.0):
-                params['max_depth'] = md
-                params['subsample'] = ss
-                bst = xgb.train(params, d_train, 2000, watchlist, early_stopping_rounds=50)
-                key = (md, ss)
-                ll = log_loss(y_valid, bst.predict(d_valid))
-                print(key, ll)
-                if ll < best_ll:
-                    best_ll = ll
-                    best_key = key
-                results[key] = (ll)
-        for k, v in results.iteritems():
+                for eta in (0.01, 0.1, 0.2):
+                    for colsam in (0.6, 0.8, 1.0):
+                        params['max_depth'] = md
+                        params['subsample'] = ss
+                        params['eta'] = eta
+                        params['colsample_bytree'] = colsam
+                        bst = xgb.train(params, d_train, 2000, watchlist, early_stopping_rounds=50)
+                        key = (md, ss, eta, colsam)
+                        ll = log_loss(y_valid, bst.predict(d_valid))
+                        print(key, ll)
+                        if ll < best_ll:
+                            best_ll = ll
+                            best_key = key
+                        results[key] = (ll)
+        print(best_key, best_ll)
+        print('max_depth, subsample, eta, colsample_by_tree')
+        for k, v in results.items():
             print(k, v)
     else:
-        bst = xgb.train(params, d_train, 2000, watchlist, early_stopping_rounds=50, verbose_eval=50)
+        bst = xgb.train(params, d_train, 2500, watchlist, early_stopping_rounds=50, verbose_eval=50)
         print(log_loss(y_valid, bst.predict(d_valid)))
-        bst.save_model('XGB_handcrafted.mdl')
+        bst.save_model('XGB_handcrafted_5_06.mdl')
 
 
     if not args.debug:
