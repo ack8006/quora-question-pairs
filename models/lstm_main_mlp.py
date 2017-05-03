@@ -180,7 +180,10 @@ def main():
         model.cuda()
 
     if args.reweight:
-        criterion = nn.NLLLoss(weight=torch.Tensor([1.309028344, 0.472001959]))
+        w_tensor = torch.Tensor([1.309028344, 0.472001959])
+        if args.cuda:
+            w_tensor = w_tensor.cuda()
+        criterion = nn.NLLLoss(weight=w_tensor)
     else:
         criterion = nn.NLLLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -193,7 +196,7 @@ def main():
     print(model_config)
 
     # best_val_acc = 0.78
-    best_ll = 0.5
+    best_ll = 0.42
     for epoch in range(args.epochs):
         model.train()
         total_cost = 0
