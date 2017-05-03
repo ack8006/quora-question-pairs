@@ -14,6 +14,9 @@ from sklearn.cross_validation import train_test_split
 from xgboost import XGBClassifier
 from sklearn.model_selection import GridSearchCV
 
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 
 
 def word_match_share(row, stops=None):
@@ -57,7 +60,10 @@ def wc_ratio(row):
     l2 = len(row['question2'])
     if l2 == 0:
         return np.nan
-    return l1 / l2
+    if l1 / l2:
+        return l2 / l1
+    else:
+        return l1 / l2
 
 def wc_diff_unique(row):
     return abs(len(set(row['question1'])) - len(set(row['question2'])))
@@ -67,7 +73,10 @@ def wc_ratio_unique(row):
     l2 = len(set(row['question2']))
     if l2 == 0:
         return np.nan
-    return l1 / l2
+    if l1 / l2:
+        return l2 / l1
+    else:
+        return l1 / l2
 
 def wc_diff_unique_stop(row, stops=None):
     return abs(len([x for x in set(row['question1']) if x not in stops]) - len([x for x in set(row['question2']) if x not in stops]))
@@ -77,7 +86,10 @@ def wc_ratio_unique_stop(row, stops=None):
     l2 = len([x for x in set(row['question2']) if x not in stops])
     if l2 == 0:
         return np.nan
-    return l1 / l2
+    if l1 / l2:
+        return l2 / l1
+    else:
+        return l1 / l2
 
 def same_start_word(row):
     if not row['question1'] or not row['question2']:
@@ -87,8 +99,19 @@ def same_start_word(row):
 def char_diff(row):
     return abs(len(''.join(row['question1'])) - len(''.join(row['question2'])))
 
+def char_ratio(row):
+    l1 = len(''.join(row['question1'])) 
+    l2 = len(''.join(row['question2']))
+    if l2 == 0:
+        return np.nan
+    if l1 / l2:
+        return l2 / l1
+    else:
+        return l1 / l2
+
 def char_diff_unique_stop(row, stops=None):
     return abs(len(''.join([x for x in set(row['question1']) if x not in stops])) - len(''.join([x for x in set(row['question2']) if x not in stops])))
+
 
 def get_weight(count, eps=10000, min_count=2):
     if count < min_count:
@@ -136,95 +159,103 @@ def tfidf_word_match_share(row, weights=None):
 def build_features(data, stops, weights):
     X = pd.DataFrame()
     f = functools.partial(word_match_share, stops=stops)
-    X['word_match'] = data.apply(f, axis=1, raw=True)
+    X['word_match'] = data.apply(f, axis=1, raw=True) #1
 
     f = functools.partial(tfidf_word_match_share, weights=weights)
-    X['tfidf_wm'] = data.apply(f, axis=1, raw=True)
+    X['tfidf_wm'] = data.apply(f, axis=1, raw=True) #2
 
     f = functools.partial(tfidf_word_match_share_stops, stops=stops, weights=weights)
-    X['tfidf_wm_stops'] = data.apply(f, axis=1, raw=True)
+    X['tfidf_wm_stops'] = data.apply(f, axis=1, raw=True) #3
 
-    X['jaccard'] = data.apply(jaccard, axis=1, raw=True)
-    X['wc_diff'] = data.apply(wc_diff, axis=1, raw=True)
-    X['wc_ratio'] = data.apply(wc_ratio, axis=1, raw=True)
-    X['wc_diff_unique'] = data.apply(wc_diff_unique, axis=1, raw=True)
-    X['wc_ratio_unique'] = data.apply(wc_ratio_unique, axis=1, raw=True)
+    X['jaccard'] = data.apply(jaccard, axis=1, raw=True) #4
+    X['wc_diff'] = data.apply(wc_diff, axis=1, raw=True) #5
+    X['wc_ratio'] = data.apply(wc_ratio, axis=1, raw=True) #6
+    X['wc_diff_unique'] = data.apply(wc_diff_unique, axis=1, raw=True) #7
+    X['wc_ratio_unique'] = data.apply(wc_ratio_unique, axis=1, raw=True) #8
 
     f = functools.partial(wc_diff_unique_stop, stops=stops)    
-    X['wc_diff_unq_stop'] = data.apply(f, axis=1, raw=True)
+    X['wc_diff_unq_stop'] = data.apply(f, axis=1, raw=True) #9
     f = functools.partial(wc_ratio_unique_stop, stops=stops)    
-    X['wc_ratio_unique_stop'] = data.apply(f, axis=1, raw=True)
+    X['wc_ratio_unique_stop'] = data.apply(f, axis=1, raw=True) #10
 
-    X['same_start'] = data.apply(same_start_word, axis=1, raw=True)
-    X['char_diff'] = data.apply(char_diff, axis=1, raw=True)
+    X['same_start'] = data.apply(same_start_word, axis=1, raw=True) #11
+    X['char_diff'] = data.apply(char_diff, axis=1, raw=True) #12
 
     f = functools.partial(char_diff_unique_stop, stops=stops) 
-    X['char_diff_unq_stop'] = data.apply(f, axis=1, raw=True)
+    X['char_diff_unq_stop'] = data.apply(f, axis=1, raw=True) #13
 
-    X['common_words'] = data.apply(common_words, axis=1, raw=True)
-    X['total_unique_words'] = data.apply(total_unique_words, axis=1, raw=True)
+#     X['common_words'] = data.apply(common_words, axis=1, raw=True)  #14
+    X['total_unique_words'] = data.apply(total_unique_words, axis=1, raw=True)  #15
 
     f = functools.partial(total_unq_words_stop, stops=stops)
-    X['total_unq_words_stop'] = data.apply(f, axis=1, raw=True)
+    X['total_unq_words_stop'] = data.apply(f, axis=1, raw=True)  #16
+    
+    X['char_ratio'] = data.apply(char_ratio, axis=1, raw=True) #17    
 
     return X
 
 
 def main():
     parser = argparse.ArgumentParser(description='PyTorch PennTreeBank RNN/LSTM Language Model')
-    parser.add_argument('--p', type=float, default=0.165,
-                            help='initial learning rate')
-    parser.add_argument('--test', action='store_true',
+    parser.add_argument('--debug', action='store_true',
                         help='uses small dfs')
+    parser.add_argument('--grid', action='store_true',
+                        help='gridsearch')
     parser.add_argument('--downsample', type=float, default=0.0,
+                            help='initial learning rate')
+    parser.add_argument('--upsample', type=float, default=0.0,
                             help='initial learning rate')
     args = parser.parse_args()
 
+    df_train = pd.read_csv('../data/train_features.csv', encoding="ISO-8859-1")
+    x_train_ab = df_train.iloc[:, 2:-1]
+    x_train_ab = x_train_ab.drop('euclidean_distance', axis=1)
+    x_train_ab = x_train_ab.drop('jaccard_distance', axis=1)
+
     df_train = pd.read_csv('../data/train.csv')
     df_train = df_train.fillna(' ')
-    df_test = pd.read_csv('../data/test.csv')
-    df_test = df_test.fillna(' ')
 
-    # if args.test:
-    #     df_train = df_train.iloc[:20000]
+    if args.debug:
+        x_train_ab = x_train_ab.iloc[:50000]
+        df_train = df_train.iloc[:50000]
 
     # explore
-    train_qs = pd.Series(df_train['question1'].tolist() + df_train['question2'].tolist()).astype(str)
-    test_qs = pd.Series(df_test['question1'].tolist() + df_test['question2'].tolist()).astype(str)
-
     stops = set(stopwords.words("english"))
 
     df_train['question1'] = df_train['question1'].map(lambda x: str(x).lower().split())
     df_train['question2'] = df_train['question2'].map(lambda x: str(x).lower().split())
 
-    df_test['question1'] = df_test['question1'].map(lambda x: str(x).lower().split())
-    df_test['question2'] = df_test['question2'].map(lambda x: str(x).lower().split())
+    train_qs = pd.Series(df_train['question1'].tolist() + df_train['question2'].tolist())
 
-    eps = 5000 
-    words = (" ".join(train_qs)).lower().split()
+    words = [x for y in train_qs for x in y]
     counts = Counter(words)
     weights = {word: get_weight(count) for word, count in counts.items()}
 
     print('Building Features')
     x_train = build_features(df_train, stops, weights)
+    x_train = pd.concat((x_train, x_train_ab), axis=1)
     y_train = df_train['is_duplicate'].values
 
     pos_train = x_train[y_train == 1]
     neg_train = x_train[y_train == 0]
 
-    # if args.downsample:
-    #     print('Downsampling')
-    #     assert args.downsample > 0.0 and args.downsample < .37
-    #     # ratio = len(pos_train) / (len(pos_train) + len(neg_train))
-    #     # scale = args.downsample / ratio
-    #     # pos_train = pos_train.iloc[:int(scale*len(pos_train))]
+    if args.downsample:
+        print('Downsampling')
+        assert args.downsample > 0.0 and args.downsample < .37
+        p = args.downsample
+        pl = len(pos_train)
+        tl = len(pos_train) + len(neg_train)
+        val = int(pl - (pl - p * tl)/((1 - p)))
+        pos_train = pos_train.iloc[:int(val)]
 
-    p = 0.17
-    scale = ((len(pos_train) / (len(pos_train) + len(neg_train))) / p) - 1
-    while scale > 1:
-        neg_train = pd.concat([neg_train, neg_train])
-        scale -=1
-    neg_train = pd.concat([neg_train, neg_train[:int(scale * len(neg_train))]])
+    if args.upsample:
+        p = args.upsample
+        scale = ((len(pos_train) / (len(pos_train) + len(neg_train))) / p) - 1
+        while scale > 1:
+            neg_train = pd.concat([neg_train, neg_train])
+            scale -=1
+        neg_train = pd.concat([neg_train, neg_train[:int(scale * len(neg_train))]])
+        
     print(len(pos_train) / (len(pos_train) + len(neg_train)))
 
     x_train = pd.concat([pos_train, neg_train])
@@ -239,22 +270,56 @@ def main():
     params['eta'] = 0.02
     params['max_depth'] = 4
     params['subsample'] = 1.0
+    params['base_score'] = 0.2
 
     d_train = xgb.DMatrix(x_train, label=y_train)
     d_valid = xgb.DMatrix(x_valid, label=y_valid)
 
     watchlist = [(d_train, 'train'), (d_valid, 'valid')]
 
-    bst = xgb.train(params, d_train, 2000, watchlist, early_stopping_rounds=50, verbose_eval=50)
-    bst.save_model('XGB_handcrafted.mdl')
+    results = {}
+    if args.grid:
+        best_ll, best_key = 999, None
+        for md in (4,5,6):
+            for ss in (0.4, 0.6, 0.8, 1.0):
+                params['max_depth'] = md
+                params['subsample'] = ss
+                bst = xgb.train(params, d_train, 2000, watchlist, early_stopping_rounds=50)
+                key = (md, ss)
+                ll = log_loss(y_valid, bst.predict(d_valid))
+                print(key, ll)
+                if ll < best_ll:
+                    best_ll = ll
+                    best_key = key
+                results[key] = (ll)
+        for k, v in results.iteritems():
+            print(k, v)
+    else:
+        bst = xgb.train(params, d_train, 2000, watchlist, early_stopping_rounds=50, verbose_eval=50)
+        print(log_loss(y_valid, bst.predict(d_valid)))
+        bst.save_model('XGB_handcrafted.mdl')
 
-    x_test = build_features(df_test, stops, weights)
-    d_test = xgb.DMatrix(x_test)
-    p_test = bst.predict(d_test)
-    sub = pd.DataFrame()
-    sub['test_id'] = df_test['test_id']
-    sub['is_duplicate'] = p_test
-    sub.to_csv('../predictions/4_xgb.csv')
+
+    if not args.debug:
+        df_test = pd.read_csv('../data/test_features.csv', encoding = "ISO-8859-1")
+        x_test_ab = df_test.iloc[:, 2:-1]
+        x_test_ab = x_test_ab.drop('euclidean_distance', axis=1)
+        x_test_ab = x_test_ab.drop('jaccard_distance', axis=1)
+        
+        df_test = pd.read_csv('../data/test.csv')
+        df_test = df_test.fillna(' ')
+
+        df_test['question1'] = df_test['question1'].map(lambda x: str(x).lower().split())
+        df_test['question2'] = df_test['question2'].map(lambda x: str(x).lower().split())
+        
+        x_test = build_features(df_test, stops, weights)
+        x_test = pd.concat((x_test, x_test_ab), axis=1)
+        d_test = xgb.DMatrix(x_test)
+        p_test = bst.predict(d_test)
+        sub = pd.DataFrame()
+        sub['test_id'] = df_test['test_id']
+        sub['is_duplicate'] = p_test
+        sub.to_csv('../predictions/4_xgb.csv')
 
 if __name__ == '__main__':
     main()
