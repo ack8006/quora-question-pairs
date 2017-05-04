@@ -124,18 +124,24 @@ def feature_gen(x):
     f.append(uw) #Num unique words
     if uw == 0: 
         uw = 1
-    f.append(f[3]/len(set(x[0])))  #Pct Overlap Q1
-    f.append(int((f[3]/len(set(x[0]))) < 0.1))
-    f.append(int((f[3]/len(set(x[0]))) < 0.2))
-    f.append(int((f[3]/len(set(x[0]))) < 0.3))
-    f.append(int((f[3]/len(set(x[0]))) < 0.4))
-    f.append(int((f[3]/len(set(x[0]))) < 0.5))
-    f.append(f[3]/len(set(x[1])))  #Pct Overlap Q2
-    f.append(int((f[3]/len(set(x[1]))) < 0.1))
-    f.append(int((f[3]/len(set(x[1]))) < 0.2))
-    f.append(int((f[3]/len(set(x[1]))) < 0.3))
-    f.append(int((f[3]/len(set(x[1]))) < 0.4))
-    f.append(int((f[3]/len(set(x[1]))) < 0.5))
+    pct_overlap = 0
+    if len(set(x[0])) > 0:
+        pct_overlap = wic / len(set(x[0]))
+    f.append(pct_overlap)  #Pct Overlap Q1
+    f.append(int(pct_overlap < 0.1))
+    f.append(int(pct_overlap < 0.2))
+    f.append(int(pct_overlap < 0.3))
+    f.append(int(pct_overlap < 0.4))
+    f.append(int(pct_overlap < 0.5))
+    pct_overlap = 0
+    if len(set(x[1])) > 0:
+        pct_overlap = wic / len(set(x[1]))
+    f.append(pct_overlap)  #Pct Overlap Q2
+    f.append(int(pct_overlap < 0.1))
+    f.append(int(pct_overlap < 0.2))
+    f.append(int(pct_overlap < 0.3))
+    f.append(int(pct_overlap < 0.4))
+    f.append(int(pct_overlap < 0.5))
     f.append(wic/uw) #Jaccard
     f.append(int((wic/uw) < 0.1))
     f.append(int((wic/uw) < 0.2))
