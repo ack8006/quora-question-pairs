@@ -169,7 +169,7 @@ def main():
 
     model = ConvRNN(args.din, args.dhid, args.dout, args.demb, args.dlin, args.vocabsize, 
                         args.dropout, args.embinit, args.hidinit, args.decinit, 
-                        glove_embeddings, args.cuda, args.rnn, args.bidir)
+                        glove_embeddings, args.cuda, args.rnn, True)
 
     if args.cuda:
         model.cuda()
@@ -184,7 +184,7 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    model_config = '\t'.join([str(x) for x in (torch.__version__, args.rnn, args.bidir, args.clip, args.nlayers, args.din, args.demb, args.dhid, args.dlin,
+    model_config = '\t'.join([str(x) for x in (torch.__version__, args.rnn, True, args.clip, args.nlayers, args.din, args.demb, args.dhid, args.dlin,
                         args.embinit, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize,
                         )])
 
