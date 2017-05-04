@@ -419,7 +419,7 @@ def main():
         pred_list += list(out.exp()[:, 1].data.cpu().numpy())
 
     with open('../predictions/'+ args.save +'.pkl', 'wb') as f:
-        pkl.dump(f)
+        pkl.dump(pred_list, f, protocol=pkl.HIGHEST_PROTOCOL)
 
 if __name__ == '__main__':
     main()
