@@ -118,9 +118,8 @@ def main():
     p = 0.19
     pl = len(pos_valid)
     tl = len(pos_valid) + len(neg_valid)
-    val = int(pl - (pl - p * tl)/((1 - p)))
+    val = int(pl - (pl - p * tl) / ((1 - p)))
     pos_valid = pos_valid.iloc[:int(val)]
-
     valid_data = pd.concat([pos_valid, neg_valid])
 
 
@@ -130,8 +129,16 @@ def main():
     q1 = [x.lower().split() for x in q1]
     q2 = [x.lower().split() for x in q2]
 
+    q1_val = list(valid_data['question1'].map(str))
+    q2_val = list(valid_data['question2'].map(str))
+    y_val = list(valid_data['is_duplicate'])
+    q1_val = [x.lower().split() for x in q1_val]
+    q2_val = [x.lower().split() for x in q2_val]
 
-    # X, y, X_val, y_val = load_data(args.data, corpus, args.din, train_split=0.9)
+    corpus.gen_vocab(q1 + q2 + q2_val + q1_val)
+
+    X, y = pad_and_shape(corpus, q1, q2, y, len(train_data), args.din)
+    X_val, y_val = pad_and_shape(corpus, q1_val, q2_val, y_val, len(valid_data), args.din)
 
 
     if args.cuda:
@@ -178,7 +185,7 @@ def main():
     print(model_config)
 
     # best_val_acc = 0.78
-    best_ll = 0.48
+    best_ll = 0.44
     for epoch in range(args.epochs):
         model.train()
         total_cost = 0
