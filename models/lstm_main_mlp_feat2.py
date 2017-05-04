@@ -148,7 +148,10 @@ def feature_gen(x):
     f.append(int((wic/uw) < 0.3))
     f.append(int((wic/uw) < 0.4))
     f.append(int((wic/uw) < 0.5))
-    f.append(int(x[0][0].lower() == x[1][0].lower())) #same start word
+    if x[0] and x[1]:
+        f.append(int(x[0][0].lower() == x[1][0].lower())) #same start word
+    else:
+        f.append(0)
 #     for q in ('who','what','when','where','why','how','which'):
 #         f.append(int(x[0][0].lower() == q))
 #         f.append(int(x[1][0].lower() == q))
