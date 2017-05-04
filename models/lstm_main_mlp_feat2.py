@@ -377,7 +377,7 @@ def main():
 
     del train_loader, valid_loader, X, y, X_val, y_val
 
-    print('Reloading Best Modelgit status')
+    print('Reloading Best Model')
     model = torch.load(args.save)
     model.cuda()
 
@@ -403,7 +403,7 @@ def main():
     X[:, 0, 2, :n_feat] = torch.from_numpy(np.array(test_feat))
     y = torch.LongTensor(len(test_data)).zero_()
 
-    if args.cuda():
+    if args.cuda:
         X = X.cuda()
         y = y.cuda()
 
