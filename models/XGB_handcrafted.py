@@ -201,25 +201,21 @@ def main():
                         help='uses small dfs')
     parser.add_argument('--grid', action='store_true',
                         help='gridsearch')
-    parser.add_argument('--downsample', type=float, default=0.0,
-                            help='initial learning rate')
-    parser.add_argument('--upsample', type=float, default=0.0,
-                            help='initial learning rate')
     parser.add_argument('--save', type=str, default='XGB',
                         help='save_file_names')
     args = parser.parse_args()
 
     df_train = pd.read_csv('../data/train_features.csv', encoding="ISO-8859-1")
-    x_train_ab = df_train.iloc[:, 2:-1]
-    x_train_ab = x_train_ab.drop('euclidean_distance', axis=1)
-    x_train_ab = x_train_ab.drop('jaccard_distance', axis=1)
+    X_train_ab = df_train.iloc[:, 2:-1]
+    X_train_ab = X_train_ab.drop('euclidean_distance', axis=1)
+    X_train_ab = X_train_ab.drop('jaccard_distance', axis=1)
 
     df_train = pd.read_csv('../data/train.csv')
     df_train = df_train.fillna(' ')
 
     if args.debug:
-        x_train_ab = x_train_ab.iloc[:50000]
-        df_train = df_train.iloc[:50000]
+        X_train_ab = X_train_ab.iloc[:100000]
+        df_train = df_train.iloc[:100000]
 
     # explore
     stops = set(stopwords.words("english"))
@@ -234,37 +230,27 @@ def main():
     weights = {word: get_weight(count) for word, count in counts.items()}
 
     print('Building Features')
-    x_train = build_features(df_train, stops, weights)
-    x_train = pd.concat((x_train, x_train_ab), axis=1)
+    X_train = build_features(df_train, stops, weights)
+    X_train = pd.concat((X_train, X_train_ab), axis=1)
     y_train = df_train['is_duplicate'].values
 
-    pos_train = x_train[y_train == 1]
-    neg_train = x_train[y_train == 0]
+    X_train, X_valid, y_train, y_valid = train_test_split(X_train, y_train, test_size=0.1, random_state=4242)
 
-    if args.downsample:
-        print('Downsampling')
-        assert args.downsample > 0.0 and args.downsample < .37
-        p = args.downsample
-        pl = len(pos_train)
-        tl = len(pos_train) + len(neg_train)
-        val = int(pl - (pl - p * tl)/((1 - p)))
-        pos_train = pos_train.iloc[:int(val)]
-
-    if args.upsample:
-        p = args.upsample
-        scale = ((len(pos_train) / (len(pos_train) + len(neg_train))) / p) - 1
-        while scale > 1:
-            neg_train = pd.concat([neg_train, neg_train])
-            scale -=1
-        neg_train = pd.concat([neg_train, neg_train[:int(scale * len(neg_train))]])
-        
-    print(len(pos_train) / (len(pos_train) + len(neg_train)))
-
-    x_train = pd.concat([pos_train, neg_train])
-    y_train = (np.zeros(len(pos_train)) + 1).tolist() + np.zeros(len(neg_train)).tolist()
+    #UPDownSampling
+    pos_train = X_train[y_train == 1]
+    neg_train = X_train[y_train == 0]
+    X_train = pd.concat((neg_train, pos_train.iloc[:int(0.8*len(pos_train))], neg_train))
+    y_train = np.array([0] * neg_train.shape[0] + [1] * pos_train.iloc[:int(0.8*len(pos_train))].shape[0] + [0] * neg_train.shape[0])
+    print(np.mean(y_train))
     del pos_train, neg_train
 
-    x_train, x_valid, y_train, y_valid = train_test_split(x_train, y_train, test_size=0.1, random_state=4242)
+    pos_valid = X_valid[y_valid == 1]
+    neg_valid = X_valid[y_valid == 0]
+    X_valid = pd.concat((neg_valid, pos_valid.iloc[:int(0.8 * len(pos_valid))], neg_valid))
+    y_valid = np.array([0] * neg_valid.shape[0] + [1] * pos_valid.iloc[:int(0.8 * len(pos_valid))].shape[0] + [0] * neg_valid.shape[0])
+    print(np.mean(y_valid))
+    del pos_valid, neg_valid
+
 
     params = {}
     params['objective'] = 'binary:logistic'
@@ -275,38 +261,39 @@ def main():
     params['base_score'] = 0.2
     # params['scale_pos_weight'] = 0.2
 
-    d_train = xgb.DMatrix(x_train, label=y_train)
-    d_valid = xgb.DMatrix(x_valid, label=y_valid)
+    d_train = xgb.DMatrix(X_train, label=y_train)
+    d_valid = xgb.DMatrix(X_valid, label=y_valid)
 
     watchlist = [(d_train, 'train'), (d_valid, 'valid')]
 
     results = {}
     if args.grid:
         best_ll, best_key = 999, None
-        for md in (5,6,7,8,9):
+        for md in (6, 7, 8, 9):
             for ss in (0.4, 0.6, 0.8, 1.0):
-                for eta in (0.01, 0.1, 0.2):
+                for eta in (0.1, ):
                     for colsam in (0.6, 0.8, 1.0):
                         params['max_depth'] = md
                         params['subsample'] = ss
                         params['eta'] = eta
                         params['colsample_bytree'] = colsam
-                        bst = xgb.train(params, d_train, 2000, watchlist, early_stopping_rounds=50)
+                        bst = xgb.train(params, d_train, 2000, watchlist, early_stopping_rounds=50, verbose_eval=50)
                         key = (md, ss, eta, colsam)
-                        ll = log_loss(y_valid, bst.predict(d_valid))
-                        print(key, ll)
-                        if ll < best_ll:
-                            best_ll = ll
+                        tll = log_loss(y_train, bst.predict(d_train))
+                        vll = log_loss(y_valid, bst.predict(d_valid))
+                        print(key, tll, vll)
+                        if vll < best_ll:
+                            best_ll = vll
                             best_key = key
-                        results[key] = (ll)
-        print(best_key, best_ll)
+                        results[key] = (tll, vll)
+        print('BEST: ', best_key, best_ll)
         print('max_depth, subsample, eta, colsample_by_tree')
         for k, v in results.items():
             print(k, v)
     else:
         bst = xgb.train(params, d_train, 2500, watchlist, early_stopping_rounds=50, verbose_eval=50)
         print(log_loss(y_valid, bst.predict(d_valid)))
-        bst.save_model(args.save+'.mdl')
+        bst.save_model(args.save + '.mdl')
 
 
     if not args.debug:
@@ -329,7 +316,7 @@ def main():
         sub = pd.DataFrame()
         sub['test_id'] = df_test['test_id']
         sub['is_duplicate'] = p_test
-        sub.to_csv('../predictions/'+args.save+'.csv')
+        sub.to_csv('../predictions/' + args.save + '.csv')
 
 if __name__ == '__main__':
     main()
