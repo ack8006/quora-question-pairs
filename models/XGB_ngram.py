@@ -67,7 +67,7 @@ def main():
                         help='location of the data corpus')
     parser.add_argument('--nfeat', type=int, default=200000,
                         help='number of features')
-    parser.add_argument('--minoccur', type=float, default=500,
+    parser.add_argument('--minoccur', type=int, default=500,
                         help='number of features')
     parser.add_argument('--maxngram', type=int, default=5,
                         help='maximum number of ngrams')
