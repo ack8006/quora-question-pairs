@@ -36,7 +36,6 @@ def get_glove_embeddings(file_path, corpus, ntoken, nemb):
 
 
 def evaluate(model, data_loader, cuda, d_in, n_feat):
-
     correct, total = 0, 0
     pred_list = []
     true_list = []
@@ -184,7 +183,7 @@ def main():
                         help='reweight loss function')
     parser.add_argument('--epochs', type=int, default=50,
                         help='upper epoch limit')
-    parser.add_argument('--batchsize', type=int, default=20, metavar='N',
+    parser.add_argument('--batchsize', type=int, default=2000, metavar='N',
                         help='batch size')
     parser.add_argument('--seed', type=int, default=3,
                         help='random seed')
@@ -192,25 +191,9 @@ def main():
                         help='random seed')
     parser.add_argument('--optimizer', action='store_true',
                         help='use ADAM optimizer')
-    parser.add_argument('--pipeline', action='store_true',
-                        help='use pipeline file')
-    parser.add_argument('--psw', type=int, default=1,
-                        help='remove stop words')
-    parser.add_argument('--ppunc', action='store_true',
-                        help='remove punctuation')
-    parser.add_argument('--pntok', action='store_true',
-                        help='use number tokens')
-    parser.add_argument('--pkq', action='store_true',
-                        help='keep question words')
-    parser.add_argument('--stem', action='store_true',
-                        help='use stemmer')
-    parser.add_argument('--lemma', action='store_true',
-                        help='use lemmatizer')
-    parser.add_argument('--freezeemb', action='store_false',
-                        help='freezes embeddings')
     parser.add_argument('--cuda', action='store_true',
                         help='use CUDA')
-    parser.add_argument('--loginterval', type=int, default=100, metavar='N',
+    parser.add_argument('--loginterval', type=int, default=20, metavar='N',
                         help='report interval')
     parser.add_argument('--save', type=str,  default='',
                         help='path to save the final model')
@@ -320,7 +303,7 @@ def main():
 
     model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, 
                         args.embinit, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize,
-                        args.pipeline, args.psw, args.ppunc, args.pntok, args.pkq, args.stem, args.lemma)])
+                        )])
 
     print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize | pipeline | stop | punc | ntoken | keep_ques | stem | lemma')
     print(model_config)
@@ -383,6 +366,50 @@ def main():
             epoch, total_cost, train_acc, val_acc, train_ll, val_ll))
         print('-' * 89)
 
+    del train_loader, valid_loader, X, y, X_val, y_val
+
+    print('Reloading Best Modelgit status')
+    model = torch.load(args.save)
+    model.cuda()
+
+    print('LOADING TEST DATA')
+    test_data = pd.read_csv('../data/test.csv')
+    test_data = test_data.fillna(' ')
+    q1 = list(test_data['question1'].map(str))
+    q2 = list(test_data['question2'].map(str))
+    y = list(test_data['is_duplicate'])
+    q1 = [x.lower().split() for x in q1]
+    q2 = [x.lower().split() for x in q2]
+
+    print('GENERATING TEST FEATURES')
+    test_feat = list(map(feature_gen, zip(q1, q2)))
+    test_feat = scalar.transform(test_feat)
+
+    n_feat = test_feat.shape[1]
+    d_in = args.din
+    feat_max = int(np.max([n_feat, d_in]))
+
+    X = torch.Tensor(len(test_data), 1, 3, feat_max)
+    X[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1, feat_max)).long()
+    X[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2, feat_max)).long()
+    X[:, 0, 2, :n_feat] = torch.from_numpy(np.array(test_feat))
+    y = torch.from_numpy(np.array(y)).long()
+
+    X = X.cuda()
+    y = y.cuda()
+
+    test_loader = DataLoader(TensorDataset(X, y),
+                                batch_size=500,
+                                shuffle=False)
+
+    print('PREDICTING')
+    pred_list = []
+    for ind, (qs, _) in enumerate(test_loader):
+        out = model(qs[:, 0, 0, :d_in].long(), qs[:, 0, 1, :d_in].long(), qs[:, 0, 2, :n_feat])
+        pred_list += list(out.exp()[:, 1].data.cpu().numpy())
+
+    with open('../predictions/'+ args.save +'.pkl', 'wb') as f:
+        pkl.dump(f)
 
 if __name__ == '__main__':
     main()
