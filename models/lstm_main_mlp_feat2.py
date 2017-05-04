@@ -386,7 +386,6 @@ def main():
     test_data = test_data.fillna(' ')
     q1 = list(test_data['question1'].map(str))
     q2 = list(test_data['question2'].map(str))
-    y = list(test_data['is_duplicate'])
     q1 = [x.lower().split() for x in q1]
     q2 = [x.lower().split() for x in q2]
 
@@ -402,16 +401,18 @@ def main():
     X[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1, feat_max)).long()
     X[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2, feat_max)).long()
     X[:, 0, 2, :n_feat] = torch.from_numpy(np.array(test_feat))
-    y = torch.from_numpy(np.array(y)).long()
+    y = torch.LongTensor(len(test_data)).zero_()
 
-    X = X.cuda()
-    y = y.cuda()
+    if args.cuda():
+        X = X.cuda()
+        y = y.cuda()
 
     test_loader = DataLoader(TensorDataset(X, y),
                                 batch_size=500,
                                 shuffle=False)
 
     print('PREDICTING')
+    model.eval()
     pred_list = []
     for ind, (qs, _) in enumerate(test_loader):
         out = model(qs[:, 0, 0, :d_in].long(), qs[:, 0, 1, :d_in].long(), qs[:, 0, 2, :n_feat])
