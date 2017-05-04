@@ -112,6 +112,7 @@ def main():
     valid_data = train_data.iloc[int(0.9 * len(train_data)):]
     train_data = train_data.iloc[:int(0.9 * len(train_data))]
 
+    print('Downsampling')
     #downsample
     pos_valid = valid_data[valid_data['is_duplicate'] == 1]
     neg_valid = valid_data[valid_data['is_duplicate'] == 0]
@@ -122,21 +123,25 @@ def main():
     pos_valid = pos_valid.iloc[:int(val)]
     valid_data = pd.concat([pos_valid, neg_valid])
 
-
+    print('Splitting Train')
     q1 = list(train_data['question1'].map(str))
     q2 = list(train_data['question2'].map(str))
     y = list(train_data['is_duplicate'])
     q1 = [x.lower().split() for x in q1]
     q2 = [x.lower().split() for x in q2]
 
+    print('Splitting Valid')
     q1_val = list(valid_data['question1'].map(str))
     q2_val = list(valid_data['question2'].map(str))
     y_val = list(valid_data['is_duplicate'])
     q1_val = [x.lower().split() for x in q1_val]
     q2_val = [x.lower().split() for x in q2_val]
 
+    print('Downsample Weight: ', np.mean(y_val))
+
     corpus.gen_vocab(q1 + q2 + q2_val + q1_val)
 
+    print('Padding and Shaping')
     X, y = pad_and_shape(corpus, q1, q2, y, len(train_data), args.din)
     X_val, y_val = pad_and_shape(corpus, q1_val, q2_val, y_val, len(valid_data), args.din)
 
