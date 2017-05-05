@@ -83,13 +83,19 @@ def main():
     print('Loading Data')
 
     print('Extracting Features')
-    train_data = pd.read_csv('../data/train.csv')
+    train_data = pd.read_csv('../data/train_data_shuffle.csv')
+    valid_data = pd.read_csv('../data/val_data_shuffle.csv')
     train_data = train_data.fillna(' ')
+    valid_data = valid_data.fillna(' ')
 
     if args.debug:
         train_data = train_data.iloc[:100000]
 
-    X_train, X_valid, y_train, y_valid = train_test_split(train_data.iloc[:,:-1], train_data['is_duplicate'], test_size=0.1, random_state=4242)
+    X_train, y_train = train_data.iloc[:,:-1], train_data['is_duplicate']
+    X_valid, y_valid = valid_data.iloc[:,:-1], valid_data['is_duplicate']
+
+    # X_train, X_valid, y_train, y_valid = train_test_split(train_data.iloc[:,:-1], train_data['is_duplicate'], test_size=0.1, random_state=4242)
+    
     word_extractor = fit_extractor(X_train, args.nfeat, args.minoccur, 0.999, 
                                 (1, args.maxngram), args.ntype)
     print('Total Features: ', len(word_extractor.vocabulary_))

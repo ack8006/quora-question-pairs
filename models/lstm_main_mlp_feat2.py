@@ -211,11 +211,10 @@ def main():
 
     pipe = None
     corpus = TacoText(args.vocabsize, lower=True, vocab_pipe=pipe)
-    train_data = pd.read_csv('../data/train.csv')
+    train_data = pd.read_csv('../data/train_data_shuffle.csv')
+    valid_data = pd.read_csv('../data/val_data_shuffle.csv')
     train_data = train_data.fillna(' ')
-    train_data = train_data.sample(frac=1)
-    valid_data = train_data.iloc[int(0.9 * len(train_data)):]
-    train_data = train_data.iloc[:int(0.9 * len(train_data))]
+    valid_data = valid_data.fillna(' ')
 
     print('Downsampling')
     #downsample
