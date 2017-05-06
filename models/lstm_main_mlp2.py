@@ -197,9 +197,9 @@ def main():
             w_tensor = w_tensor.cuda()
         criterion = nn.NLLLoss(weight=w_tensor)
     else:
+        w_tensor = torch.Tensor([0.67, 0.33])
         if args.cuda:
             w_tensor = w_tensor.cuda()
-        w_tensor = torch.Tensor([0.67, 0.33])
         criterion = nn.NLLLoss(weight=w_tensor)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
