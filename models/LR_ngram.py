@@ -101,7 +101,7 @@ def main():
     val_pred = lr.predict_proba(X_valid)
     print('Train:', log_loss(y_train, train_pred))
     print('Val:', log_loss(y_valid, val_pred))
-    with open('../predictions/'+args.save+'_lr.csv') as f:
+    with open('../predictions/'+args.save+'_lr.csv', 'wb') as f:
         pkl.dump(val_pred, f)
 
 
