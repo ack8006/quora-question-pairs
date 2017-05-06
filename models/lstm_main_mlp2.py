@@ -17,7 +17,8 @@ from sklearn.metrics import log_loss
 from models2 import LSTMModelMLP
 sys.path.append('../utils/')
 from data import TacoText
-from preprocess import pad_and_shape
+from nltk.corpus import stopwords
+from preprocess import pad_and_shape, split_text
 
 
 def get_glove_embeddings(file_path, corpus, ntoken, nemb):
@@ -95,6 +96,12 @@ def main():
                         help='use ADAM optimizer')
     parser.add_argument('--freezeemb', action='store_false',
                         help='freezes embeddings')
+
+    parser.add_argument('--clean', action='store_true',
+                        help='clean text')
+    parser.add_argument('--rm_stops', action='store_true',
+                        help='remove stop words')
+
     parser.add_argument('--cuda', action='store_true',
                         help='use CUDA')
     parser.add_argument('--loginterval', type=int, default=100, metavar='N',
@@ -111,30 +118,41 @@ def main():
     train_data = train_data.fillna(' ')
     valid_data = valid_data.fillna(' ')
 
-    print('Downsampling')
-    #downsample
-    pos_valid = valid_data[valid_data['is_duplicate'] == 1]
-    neg_valid = valid_data[valid_data['is_duplicate'] == 0]
-    p = 0.19
-    pl = len(pos_valid)
-    tl = len(pos_valid) + len(neg_valid)
-    val = int(pl - (pl - p * tl) / ((1 - p)))
-    pos_valid = pos_valid.iloc[:int(val)]
-    valid_data = pd.concat([pos_valid, neg_valid])
+    if args.reweight:
+        print('Downsampling')
+        #downsample
+        pos_valid = valid_data[valid_data['is_duplicate'] == 1]
+        neg_valid = valid_data[valid_data['is_duplicate'] == 0]
+        p = 0.19
+        pl = len(pos_valid)
+        tl = len(pos_valid) + len(neg_valid)
+        val = int(pl - (pl - p * tl) / ((1 - p)))
+        pos_valid = pos_valid.iloc[:int(val)]
+        valid_data = pd.concat([pos_valid, neg_valid])
 
-    print('Splitting Train')
     q1 = list(train_data['question1'].map(str))
     q2 = list(train_data['question2'].map(str))
     y = list(train_data['is_duplicate'])
-    q1 = [x.lower().split() for x in q1]
-    q2 = [x.lower().split() for x in q2]
 
-    print('Splitting Valid')
     q1_val = list(valid_data['question1'].map(str))
     q2_val = list(valid_data['question2'].map(str))
     y_val = list(valid_data['is_duplicate'])
-    q1_val = [x.lower().split() for x in q1_val]
-    q2_val = [x.lower().split() for x in q2_val]
+
+    if args.clean:
+        print('Cleaning Data')
+        stops = None
+        if args.rm_stops:
+            stops = stops = set(stopwords.words("english"))
+        q1 = [split_text(x, stops) for x in q1]
+        q2 = [split_text(x, stops) for x in q2]
+        q1_val = [split_text(x, stops) for x in q1_val]
+        q2_val = [split_text(x, stops) for x in q2_val]
+    else:
+        print('Splitting Data')
+        q1 = [x.lower().split() for x in q1]
+        q2 = [x.lower().split() for x in q2]
+        q1_val = [x.lower().split() for x in q1_val]
+        q2_val = [x.lower().split() for x in q2_val]
 
     print('Downsample Weight: ', np.mean(y_val))
 
@@ -173,19 +191,21 @@ def main():
         model.cuda()
 
     if args.reweight:
-        w_tensor = torch.Tensor([1.309028344, 0.472001959])
+        # w_tensor = torch.Tensor([1.309028344, 0.472001959])
+        w_tensor = torch.Tensor([0.81, 0.19])
         if args.cuda:
             w_tensor = w_tensor.cuda()
         criterion = nn.NLLLoss(weight=w_tensor)
     else:
-        criterion = nn.NLLLoss()
+        w_tensor = torch.Tensor([0.67, 0.33])
+        criterion = nn.NLLLoss(weight=w_tensor)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, 
                         args.embinit, args.decinit, args.hidinit, args.dropout, args.optimizer, args.reweight, args.lr, args.vocabsize,
-                        args.batchsize)])
+                        args.batchsize, args.clean, args.rm_stops)])
 
-    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | DecoderInit | WeightInit | Dropout | Optimizer | Reweight | LR | VocabSize | batchsize')
+    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | DecoderInit | WeightInit | Dropout | Optimizer | Reweight | LR | VocabSize | batchsize | Clean | Stops')
     print(model_config)
 
     # best_val_acc = 0.78
@@ -233,7 +253,7 @@ def main():
             with open(args.save + '_corpus.pkl', 'wb') as corp_f:
                 pkl.dump(corpus, corp_f, protocol=pkl.HIGHEST_PROTOCOL)
             torch.save(model.cpu(), args.save)
-            torch.save(model.cpu().state_dict(), args.save + ".state_dict")
+            # torch.save(model.cpu().state_dict(), args.save + ".state_dict")
             with open(args.save + ".state_dict.config", "w") as f:
                 f.write(model_config)
             best_ll = val_ll
@@ -244,6 +264,21 @@ def main():
         print('Epoch: {} | Train Loss: {:.4f} | Train Accuracy: {:.4f} | Val Accuracy: {:.4f} | Train LL: {:.4f} | Val LL: {:.4f}'.format(
             epoch, total_cost, train_acc, val_acc, train_ll, val_ll))
         print('-' * 89)
+
+    print('Reloading Best Model')
+    model = torch.load(args.save)
+    model.cuda()
+    model.eval()
+
+    print('PREDICTING VALID')
+    pred_list = []
+    for ind, (qs, duplicate) in enumerate(valid_loader):
+        out = model(qs[:, 0, 0, :], qs[:, 0, 1, :])
+        pred_list += list(out.exp()[:, 1].data.cpu().numpy())
+
+    with open('../predictions/'+ args.save +'_val.pkl', 'wb') as f:
+        pkl.dump(pred_list, f, protocol=pkl.HIGHEST_PROTOCOL)
+
 
 
 if __name__ == '__main__':

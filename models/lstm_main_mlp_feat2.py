@@ -3,7 +3,6 @@ import sys
 import argparse
 import time
 import pickle as pkl
-import functools
 
 import numpy as np
 import pandas as pd
@@ -19,7 +18,7 @@ from nltk.corpus import stopwords
 from models2 import LSTMModelMLPFeat
 sys.path.append('../utils/')
 from data import TacoText
-from preprocess import clean_and_tokenize, pad_and_shape
+from preprocess import clean_and_tokenize, pad_and_shape, split_text
 
 
 def get_glove_embeddings(file_path, corpus, ntoken, nemb):
@@ -192,6 +191,12 @@ def main():
                         help='reweight loss function')
     parser.add_argument('--epochs', type=int, default=50,
                         help='upper epoch limit')
+
+    parser.add_argument('--clean', action='store_true',
+                        help='clean text')
+    parser.add_argument('--rm_stops', action='store_true',
+                        help='remove stop words')
+
     parser.add_argument('--batchsize', type=int, default=2000, metavar='N',
                         help='batch size')
     parser.add_argument('--seed', type=int, default=3,
@@ -216,30 +221,45 @@ def main():
     train_data = train_data.fillna(' ')
     valid_data = valid_data.fillna(' ')
 
-    print('Downsampling')
-    #downsample
-    pos_valid = valid_data[valid_data['is_duplicate'] == 1]
-    neg_valid = valid_data[valid_data['is_duplicate'] == 0]
-    p = 0.19
-    pl = len(pos_valid)
-    tl = len(pos_valid) + len(neg_valid)
-    val = int(pl - (pl - p * tl) / ((1 - p)))
-    pos_valid = pos_valid.iloc[:int(val)]
-    valid_data = pd.concat([pos_valid, neg_valid])
+    if args.reweight:
+        print('Downsampling')
+        #downsample
+        pos_valid = valid_data[valid_data['is_duplicate'] == 1]
+        neg_valid = valid_data[valid_data['is_duplicate'] == 0]
+        p = 0.19
+        pl = len(pos_valid)
+        tl = len(pos_valid) + len(neg_valid)
+        val = int(pl - (pl - p * tl) / ((1 - p)))
+        pos_valid = pos_valid.iloc[:int(val)]
+        valid_data = pd.concat([pos_valid, neg_valid])
 
     print('Splitting Train')
     q1 = list(train_data['question1'].map(str))
     q2 = list(train_data['question2'].map(str))
     y = list(train_data['is_duplicate'])
-    q1 = [x.lower().split() for x in q1]
-    q2 = [x.lower().split() for x in q2]
 
     print('Splitting Valid')
     q1_val = list(valid_data['question1'].map(str))
     q2_val = list(valid_data['question2'].map(str))
     y_val = list(valid_data['is_duplicate'])
-    q1_val = [x.lower().split() for x in q1_val]
-    q2_val = [x.lower().split() for x in q2_val]
+
+    if args.clean:
+        print('Cleaning Data')
+        stops = None
+        if args.rm_stops:
+            stops = stops = set(stopwords.words("english"))
+        q1 = [split_text(x, stops) for x in q1]
+        q2 = [split_text(x, stops) for x in q2]
+        q1_val = [split_text(x, stops) for x in q1_val]
+        q2_val = [split_text(x, stops) for x in q2_val]
+    else:
+        print('Splitting Data')
+        q1 = [x.lower().split() for x in q1]
+        q2 = [x.lower().split() for x in q2]
+        q1_val = [x.lower().split() for x in q1_val]
+        q2_val = [x.lower().split() for x in q2_val]
+
+    print('Downsample Weight: ', np.mean(y_val))
 
     corpus.gen_vocab(q1 + q2 + q2_val + q1_val)
 
@@ -300,20 +320,22 @@ def main():
         model.cuda()
 
     if args.reweight:
-        w_tensor = torch.Tensor([1.309028344, 0.472001959])
+        # w_tensor = torch.Tensor([1.309028344, 0.472001959])
+        w_tensor = torch.Tensor([0.81, 0.19])
         if args.cuda:
             w_tensor = w_tensor.cuda()
         criterion = nn.NLLLoss(weight=w_tensor)
     else:
-        criterion = nn.NLLLoss()
+        w_tensor = torch.Tensor([0.67, 0.33])
+        criterion = nn.NLLLoss(weight=w_tensor)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     model_config = '\t'.join([str(x) for x in (torch.__version__, args.clip, args.nlayers, args.din, args.demb, args.dhid, 
-                        args.embinit, args.decinit, args.hidinit, args.dropout, args.optimizer, args.lr, args.vocabsize,
-                        )])
+                        args.embinit, args.decinit, args.hidinit, args.dropout, args.optimizer, args.reweight, args.lr, args.vocabsize,
+                        args.batchsize, args.clean, args.rm_stops)])
 
-    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | DecoderInit | WeightInit | Dropout | Optimizer| LR | VocabSize | pipeline | stop | punc | ntoken | keep_ques | stem | lemma')
+    print('Pytorch | Clip | #Layers | InSize | EmbDim | HiddenDim | EncoderInit | DecoderInit | WeightInit | Dropout | Optimizer | Reweight | LR | VocabSize | batchsize | Clean | Stops')
     print(model_config)
 
     # best_val_acc = 0.78
@@ -374,51 +396,61 @@ def main():
             epoch, total_cost, train_acc, val_acc, train_ll, val_ll))
         print('-' * 89)
 
-    del train_loader, valid_loader, X, y, X_val, y_val
+    del train_loader, X, y, X_val, y_val
 
     print('Reloading Best Model')
     model = torch.load(args.save)
     model.cuda()
-
-    print('LOADING TEST DATA')
-    test_data = pd.read_csv('../data/test.csv')
-    test_data = test_data.fillna(' ')
-    q1 = list(test_data['question1'].map(str))
-    q2 = list(test_data['question2'].map(str))
-    q1 = [x.lower().split() for x in q1]
-    q2 = [x.lower().split() for x in q2]
-
-    print('GENERATING TEST FEATURES')
-    test_feat = list(map(feature_gen, zip(q1, q2)))
-    test_feat = scalar.transform(test_feat)
-
-    n_feat = test_feat.shape[1]
-    d_in = args.din
-    feat_max = int(np.max([n_feat, d_in]))
-
-    X = torch.Tensor(len(test_data), 1, 3, feat_max)
-    X[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1, feat_max)).long()
-    X[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2, feat_max)).long()
-    X[:, 0, 2, :n_feat] = torch.from_numpy(np.array(test_feat))
-    y = torch.LongTensor(len(test_data)).zero_()
-
-    if args.cuda:
-        X = X.cuda()
-        y = y.cuda()
-
-    test_loader = DataLoader(TensorDataset(X, y),
-                                batch_size=500,
-                                shuffle=False)
-
-    print('PREDICTING')
     model.eval()
+
+    print('PREDICTING VALID')
     pred_list = []
-    for ind, (qs, _) in enumerate(test_loader):
+    for ind, (qs, _) in enumerate(valid_loader):
         out = model(qs[:, 0, 0, :d_in].long(), qs[:, 0, 1, :d_in].long(), qs[:, 0, 2, :n_feat])
         pred_list += list(out.exp()[:, 1].data.cpu().numpy())
 
-    with open('../predictions/'+ args.save +'.pkl', 'wb') as f:
+    with open('../predictions/'+ args.save +'_val.pkl', 'wb') as f:
         pkl.dump(pred_list, f, protocol=pkl.HIGHEST_PROTOCOL)
+
+    if args.reweight:
+        print('LOADING TEST DATA')
+        test_data = pd.read_csv('../data/test.csv')
+        test_data = test_data.fillna(' ')
+        q1 = list(test_data['question1'].map(str))
+        q2 = list(test_data['question2'].map(str))
+        q1 = [x.lower().split() for x in q1]
+        q2 = [x.lower().split() for x in q2]
+
+        print('GENERATING TEST FEATURES')
+        test_feat = list(map(feature_gen, zip(q1, q2)))
+        test_feat = scalar.transform(test_feat)
+
+        n_feat = test_feat.shape[1]
+        d_in = args.din
+        feat_max = int(np.max([n_feat, d_in]))
+
+        X = torch.Tensor(len(test_data), 1, 3, feat_max)
+        X[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1, feat_max)).long()
+        X[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2, feat_max)).long()
+        X[:, 0, 2, :n_feat] = torch.from_numpy(np.array(test_feat))
+        y = torch.LongTensor(len(test_data)).zero_()
+
+        if args.cuda:
+            X = X.cuda()
+            y = y.cuda()
+
+        test_loader = DataLoader(TensorDataset(X, y),
+                                    batch_size=500,
+                                    shuffle=False)
+
+        print('PREDICTING')
+        pred_list = []
+        for ind, (qs, _) in enumerate(test_loader):
+            out = model(qs[:, 0, 0, :d_in].long(), qs[:, 0, 1, :d_in].long(), qs[:, 0, 2, :n_feat])
+            pred_list += list(out.exp()[:, 1].data.cpu().numpy())
+
+        with open('../predictions/'+ args.save +'.pkl', 'wb') as f:
+            pkl.dump(pred_list, f, protocol=pkl.HIGHEST_PROTOCOL)
 
 if __name__ == '__main__':
     main()
