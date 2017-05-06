@@ -243,7 +243,25 @@ def main():
     q2_val = list(valid_data['question2'].map(str))
     y_val = list(valid_data['is_duplicate'])
 
+    #FEATURES SHOULD BE BASED ON UNCLEANED DATA
+    print('Splitting Data')
+    q1 = [x.lower().split() for x in q1]
+    q2 = [x.lower().split() for x in q2]
+    q1_val = [x.lower().split() for x in q1_val]
+    q2_val = [x.lower().split() for x in q2_val]
+
+    train_feat = list(map(feature_gen, zip(q1, q2)))
+    val_feat = list(map(feature_gen, zip(q1_val, q2_val)))
+    scalar = preprocessing.StandardScaler()
+    train_feat = scalar.fit_transform(train_feat)
+    val_feat = scalar.transform(val_feat)
+
     if args.clean:
+        #Reload and clean data
+        q1 = list(train_data['question1'].map(str))
+        q2 = list(train_data['question2'].map(str))
+        q1_val = list(valid_data['question1'].map(str))
+        q2_val = list(valid_data['question2'].map(str))
         print('Cleaning Data')
         stops = None
         if args.rm_stops:
@@ -251,13 +269,7 @@ def main():
         q1 = [split_text(x, stops) for x in q1]
         q2 = [split_text(x, stops) for x in q2]
         q1_val = [split_text(x, stops) for x in q1_val]
-        q2_val = [split_text(x, stops) for x in q2_val]
-    else:
-        print('Splitting Data')
-        q1 = [x.lower().split() for x in q1]
-        q2 = [x.lower().split() for x in q2]
-        q1_val = [x.lower().split() for x in q1_val]
-        q2_val = [x.lower().split() for x in q2_val]
+        q2_val = [split_text(x, stops) for x in q2_val]        
 
     print('Downsample Weight: ', np.mean(y_val))
 
