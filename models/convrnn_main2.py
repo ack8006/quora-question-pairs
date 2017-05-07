@@ -12,11 +12,13 @@ from torch.autograd import Variable
 from torch.nn.utils import clip_grad_norm
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.metrics import log_loss
+from nltk.corpus import stopwords
+
 
 from convrnn import ConvRNN
 sys.path.append('../utils/')
 from data import TacoText
-from preprocess import pad_and_shape
+from preprocess import pad_and_shape, split_text
 
 
 def get_glove_embeddings(file_path, corpus, ntoken, nemb):
@@ -88,6 +90,12 @@ def main():
                         help='lstm or gru')
     parser.add_argument('--epochs', type=int, default=50,
                         help='upper epoch limit')
+
+    parser.add_argument('--clean', action='store_true',
+                        help='clean text')
+    parser.add_argument('--rm_stops', action='store_true',
+                        help='remove stop words')
+
     parser.add_argument('--batchsize', type=int, default=2000, metavar='N',
                         help='batch size')
     parser.add_argument('--seed', type=int, default=3,
@@ -107,36 +115,48 @@ def main():
     
     pipe = None
     corpus = TacoText(args.vocabsize, lower=True, vocab_pipe=pipe)
-    train_data = pd.read_csv('../data/train.csv')
+    train_data = pd.read_csv('../data/train_data_shuffle.csv')
+    valid_data = pd.read_csv('../data/val_data_shuffle.csv')
     train_data = train_data.fillna(' ')
-    train_data = train_data.sample(frac=1)
-    valid_data = train_data.iloc[int(0.9 * len(train_data)):]
-    train_data = train_data.iloc[:int(0.9 * len(train_data))]
+    valid_data = valid_data.fillna(' ')
 
-    print('Downsampling')
-    #downsample
-    pos_valid = valid_data[valid_data['is_duplicate'] == 1]
-    neg_valid = valid_data[valid_data['is_duplicate'] == 0]
-    p = 0.19
-    pl = len(pos_valid)
-    tl = len(pos_valid) + len(neg_valid)
-    val = int(pl - (pl - p * tl) / ((1 - p)))
-    pos_valid = pos_valid.iloc[:int(val)]
-    valid_data = pd.concat([pos_valid, neg_valid])
+    if args.reweight
+        print('Downsampling')
+        #downsample
+        pos_valid = valid_data[valid_data['is_duplicate'] == 1]
+        neg_valid = valid_data[valid_data['is_duplicate'] == 0]
+        p = 0.19
+        pl = len(pos_valid)
+        tl = len(pos_valid) + len(neg_valid)
+        val = int(pl - (pl - p * tl) / ((1 - p)))
+        pos_valid = pos_valid.iloc[:int(val)]
+        valid_data = pd.concat([pos_valid, neg_valid])
 
     print('Splitting Train')
     q1 = list(train_data['question1'].map(str))
     q2 = list(train_data['question2'].map(str))
     y = list(train_data['is_duplicate'])
-    q1 = [x.lower().split() for x in q1]
-    q2 = [x.lower().split() for x in q2]
 
     print('Splitting Valid')
     q1_val = list(valid_data['question1'].map(str))
     q2_val = list(valid_data['question2'].map(str))
     y_val = list(valid_data['is_duplicate'])
-    q1_val = [x.lower().split() for x in q1_val]
-    q2_val = [x.lower().split() for x in q2_val]
+
+    if args.clean:
+        print('Cleaning Data')
+        stops = None
+        if args.rm_stops:
+            stops = stops = set(stopwords.words("english"))
+        q1 = [split_text(x, stops) for x in q1]
+        q2 = [split_text(x, stops) for x in q2]
+        q1_val = [split_text(x, stops) for x in q1_val]
+        q2_val = [split_text(x, stops) for x in q2_val]
+    else:
+        print('Splitting Data')
+        q1 = [x.lower().split() for x in q1]
+        q2 = [x.lower().split() for x in q2]
+        q1_val = [x.lower().split() for x in q1_val]
+        q2_val = [x.lower().split() for x in q2_val]
 
     print('Downsample Weight: ', np.mean(y_val))
 
@@ -145,7 +165,6 @@ def main():
     print('Padding and Shaping')
     X, y = pad_and_shape(corpus, q1, q2, y, len(train_data), args.din)
     X_val, y_val = pad_and_shape(corpus, q1_val, q2_val, y_val, len(valid_data), args.din)
-
 
     if args.cuda:
         X, y = X.cuda(), y.cuda()
@@ -192,7 +211,7 @@ def main():
     print(model_config)
 
     # best_val_acc = 0.78
-    best_ll = 0.5
+    best_ll = 0.44
     for epoch in range(args.epochs):
         model.train()
         total_cost = 0
@@ -249,41 +268,53 @@ def main():
         print('-' * 89)
 
 
-    del train_loader, valid_loader, X, y, X_val, y_val
+    del train_loader, X, y, X_val, y_val
 
     print('Reloading Best Model')
     model = torch.load(args.save)
     model.cuda()
-
-    print('LOADING TEST DATA')
-    test_data = pd.read_csv('../data/test.csv')
-    test_data = test_data.fillna(' ')
-    q1 = list(test_data['question1'].map(str))
-    q2 = list(test_data['question2'].map(str))
-    q1 = [x.lower().split() for x in q1]
-    q2 = [x.lower().split() for x in q2]
-
-    X = torch.Tensor(len(test_data), 1, 2, args.din)
-    X[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1, args.din)).long()
-    X[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2, args.din)).long()
-    y = torch.LongTensor(len(test_data)).zero_()
-
-    X = X.cuda()
-    y = y.cuda()
-
-    test_loader = DataLoader(TensorDataset(X, y),
-                                batch_size=500,
-                                shuffle=False)
-
-    print('PREDICTING')
     model.eval()
+
+    print('PREDICTING VALID')
     pred_list = []
-    for ind, (qs, _) in enumerate(test_loader):
+    for ind, (qs, duplicate) in enumerate(valid_loader):
         out = model(qs[:, 0, 0, :], qs[:, 0, 1, :])
         pred_list += list(out.exp()[:, 1].data.cpu().numpy())
 
-    with open('../predictions/'+ args.save +'.pkl', 'wb') as f:
-        pkl.dump(f)
+    with open('../predictions/'+ args.save +'_val.pkl', 'wb') as f:
+        pkl.dump(pred_list, f, protocol=pkl.HIGHEST_PROTOCOL)
+        
+
+    if args.reweight:
+        print('LOADING TEST DATA')
+        test_data = pd.read_csv('../data/test.csv')
+        test_data = test_data.fillna(' ')
+        q1 = list(test_data['question1'].map(str))
+        q2 = list(test_data['question2'].map(str))
+        q1 = [x.lower().split() for x in q1]
+        q2 = [x.lower().split() for x in q2]
+
+        X = torch.Tensor(len(test_data), 1, 2, args.din)
+        X[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1, args.din)).long()
+        X[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2, args.din)).long()
+        y = torch.LongTensor(len(test_data)).zero_()
+
+        X = X.cuda()
+        y = y.cuda()
+
+        test_loader = DataLoader(TensorDataset(X, y),
+                                    batch_size=500,
+                                    shuffle=False)
+
+        print('PREDICTING')
+        model.eval()
+        pred_list = []
+        for ind, (qs, _) in enumerate(test_loader):
+            out = model(qs[:, 0, 0, :], qs[:, 0, 1, :])
+            pred_list += list(out.exp()[:, 1].data.cpu().numpy())
+
+        with open('../predictions/'+ args.save +'.pkl', 'wb') as f:
+            pkl.dump(f)
 
 
 if __name__ == '__main__':
