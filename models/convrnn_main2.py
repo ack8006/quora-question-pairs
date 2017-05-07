@@ -120,7 +120,7 @@ def main():
     train_data = train_data.fillna(' ')
     valid_data = valid_data.fillna(' ')
 
-    if args.reweight
+    if args.reweight:
         print('Downsampling')
         #downsample
         pos_valid = valid_data[valid_data['is_duplicate'] == 1]
@@ -283,7 +283,7 @@ def main():
 
     with open('../predictions/'+ args.save +'_val.pkl', 'wb') as f:
         pkl.dump(pred_list, f, protocol=pkl.HIGHEST_PROTOCOL)
-        
+
 
     if args.reweight:
         print('LOADING TEST DATA')
