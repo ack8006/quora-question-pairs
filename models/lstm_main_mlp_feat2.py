@@ -332,16 +332,12 @@ def main():
         model.cuda()
 
     if args.reweight:
-        # w_tensor = torch.Tensor([1.309028344, 0.472001959])
-        w_tensor = torch.Tensor([0.81, 0.19])
+        w_tensor = torch.Tensor([1.309028344, 0.472001959])
         if args.cuda:
             w_tensor = w_tensor.cuda()
         criterion = nn.NLLLoss(weight=w_tensor)
     else:
-        w_tensor = torch.Tensor([0.67, 0.33])
-        if args.cuda:
-            w_tensor = w_tensor.cuda()
-        criterion = nn.NLLLoss(weight=w_tensor)
+        criterion = nn.NLLLoss()
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
