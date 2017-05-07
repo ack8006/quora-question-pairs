@@ -275,11 +275,11 @@ def main():
 
     corpus.gen_vocab(q1 + q2 + q2_val + q1_val)
 
-    train_feat = list(map(feature_gen, zip(q1, q2)))
-    val_feat = list(map(feature_gen, zip(q1_val, q2_val)))
-    scalar = preprocessing.StandardScaler()
-    train_feat = scalar.fit_transform(train_feat)
-    val_feat = scalar.transform(val_feat)
+    # train_feat = list(map(feature_gen, zip(q1, q2)))
+    # val_feat = list(map(feature_gen, zip(q1_val, q2_val)))
+    # scalar = preprocessing.StandardScaler()
+    # train_feat = scalar.fit_transform(train_feat)
+    # val_feat = scalar.transform(val_feat)
 
     n_feat = train_feat.shape[1]
     d_in = args.din
