@@ -1,5 +1,6 @@
 import argparse
 import functools
+from collections import defaultdict
 
 import numpy as np
 import pandas as pd
@@ -213,9 +214,39 @@ def main():
     df_train = pd.read_csv('../data/train.csv')
     df_train = df_train.fillna(' ')
 
+    df_test = pd.read_csv('../data/test.csv')
+    ques = pd.concat([df_train[['question1', 'question2']], \
+        df_test[['question1', 'question2']]], axis=0).reset_index(drop='index')
+    q_dict = defaultdict(set)
+    for i in range(ques.shape[0]):
+            q_dict[ques.question1[i]].add(ques.question2[i])
+            q_dict[ques.question2[i]].add(ques.question1[i])
+
+    def q1_freq(row):
+        return(len(q_dict[row['question1']]))
+        
+    def q2_freq(row):
+        return(len(q_dict[row['question2']]))
+        
+    def q1_q2_intersect(row):
+        return(len(set(q_dict[row['question1']]).intersection(set(q_dict[row['question2']]))))
+
+    df_train['q1_q2_intersect'] = df_train.apply(q1_q2_intersect, axis=1, raw=True)
+    df_train['q1_freq'] = df_train.apply(q1_freq, axis=1, raw=True)
+    df_train['q2_freq'] = df_train.apply(q2_freq, axis=1, raw=True)
+
+    df_test['q1_q2_intersect'] = df_test.apply(q1_q2_intersect, axis=1, raw=True)
+    df_test['q1_freq'] = df_test.apply(q1_freq, axis=1, raw=True)
+    df_test['q2_freq'] = df_test.apply(q2_freq, axis=1, raw=True)
+
+    test_leaky = df_test.loc[:, ['q1_q2_intersect','q1_freq','q2_freq']]
+    del df_test
+
     if args.debug:
         X_train_ab = X_train_ab.iloc[:100000]
         df_train = df_train.iloc[:100000]
+
+    train_leaky = df_train.loc[:, ['q1_q2_intersect','q1_freq','q2_freq']]
 
     # explore
     stops = set(stopwords.words("english"))
@@ -231,7 +262,7 @@ def main():
 
     print('Building Features')
     X_train = build_features(df_train, stops, weights)
-    X_train = pd.concat((X_train, X_train_ab), axis=1)
+    X_train = pd.concat((X_train, X_train_ab, train_leaky), axis=1)
     y_train = df_train['is_duplicate'].values
 
     X_train, X_valid, y_train, y_valid = train_test_split(X_train, y_train, test_size=0.1, random_state=4242)
@@ -298,7 +329,7 @@ def main():
 
     if not args.debug:
         print('Building Test Features')
-        df_test = pd.read_csv('../data/test_features.csv', encoding = "ISO-8859-1")
+        df_test = pd.read_csv('../data/test_features.csv', encoding="ISO-8859-1")
         x_test_ab = df_test.iloc[:, 2:-1]
         x_test_ab = x_test_ab.drop('euclidean_distance', axis=1)
         x_test_ab = x_test_ab.drop('jaccard_distance', axis=1)
@@ -310,7 +341,7 @@ def main():
         df_test['question2'] = df_test['question2'].map(lambda x: str(x).lower().split())
         
         x_test = build_features(df_test, stops, weights)
-        x_test = pd.concat((x_test, x_test_ab), axis=1)
+        x_test = pd.concat((x_test, x_test_ab, test_leaky), axis=1)
         d_test = xgb.DMatrix(x_test)
         p_test = bst.predict(d_test)
         sub = pd.DataFrame()
