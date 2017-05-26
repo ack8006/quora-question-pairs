@@ -9,7 +9,6 @@ import xgboost as xgb
 from nltk.corpus import stopwords
 from collections import Counter
 from sklearn.metrics import log_loss
-from sklearn.linear_model import LogisticRegression
 from sklearn.cross_validation import train_test_split
 
 from xgboost import XGBClassifier
@@ -299,7 +298,7 @@ def main():
 
     results = {}
     if args.grid:
-        best_ll, best_key = 999, None
+        best_ll, best_key, best_model = 999, None, None
         for md in (6, 7, 8, 9):
             for ss in (0.4, 0.6, 0.8, 1.0):
                 for eta in (0.1, ):
@@ -316,11 +315,13 @@ def main():
                         if vll < best_ll:
                             best_ll = vll
                             best_key = key
+                            best_model = bst
                         results[key] = (tll, vll)
         print('BEST: ', best_key, best_ll)
         print('max_depth, subsample, eta, colsample_by_tree')
         for k, v in results.items():
             print(k, v)
+        bst = best_model
     else:
         bst = xgb.train(params, d_train, 2500, watchlist, early_stopping_rounds=50, verbose_eval=50)
         print(log_loss(y_valid, bst.predict(d_valid)))
