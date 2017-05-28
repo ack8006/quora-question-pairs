@@ -270,7 +270,7 @@ def main():
                             best_key = key
                             best_model = bst
                         results[key] = (tll, vll)
-                        p_test = bst.predict(d_test)
+                        p_test = bst.predict(d_test, ntree_limit=bst.best_ntree_limit)
                         sub = pd.DataFrame()
                         sub['test_id'] = X_test.index
                         sub['is_duplicate'] = p_test
