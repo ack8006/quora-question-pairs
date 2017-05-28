@@ -266,12 +266,14 @@ print('Null word embeddings: %d' % np.sum(np.sum(embedding_matrix, axis=1) == 0)
 
 data_1_train = np.vstack((data_1[idx_train], data_2[idx_train]))
 data_2_train = np.vstack((data_2[idx_train], data_1[idx_train]))
-leaks_train = np.vstack((leaks.iloc[idx_train].values, leaks.iloc[idx_train].values))
+# leaks_train = np.vstack((leaks.iloc[idx_train].values, leaks.iloc[idx_train].values))
+leaks_train = leaks.iloc[idx_train].values
 labels_train = np.concatenate((labels[idx_train], labels[idx_train]))
 
 data_1_val = np.vstack((data_1[idx_val], data_2[idx_val]))
 data_2_val = np.vstack((data_2[idx_val], data_1[idx_val]))
-leaks_val = np.vstack((leaks.iloc[idx_val].values, leaks.iloc[idx_val].values))
+# leaks_val = np.vstack((leaks.iloc[idx_val].values, leaks.iloc[idx_val].values))
+leaks_val = leaks.iloc[idx_val].values
 labels_val = np.concatenate((labels[idx_val], labels[idx_val]))
 
 weight_val = np.ones(len(labels_val))
@@ -308,8 +310,8 @@ merged = Dense(num_dense, activation=act)(merged)
 merged = BatchNormalization()(merged)
 merged = Dropout(rate_drop_dense)(merged)
 
-# preds = Dense(1, activation='sigmoid')(merged)
-preds = Dense(1, activation=act)(merged)
+preds = Dense(1, activation='sigmoid')(merged)
+# preds = Dense(1, activation=act)(merged)
 
 ########################################
 ## add class weight
