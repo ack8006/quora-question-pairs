@@ -87,8 +87,7 @@ def text_to_wordlist(text, remove_stopwords=False, stem_words=False):
     # Clean the text, with the option to remove stopwords and to stem words.
     
     # Convert words to lower case and split them
-    text = text.lower()
-    # text = text.lower().split()
+    text = text.lower().split()
 
     # Optionally, remove stop words
     if remove_stopwords:
@@ -153,14 +152,6 @@ def text_to_wordlist(text, remove_stopwords=False, stem_words=False):
     text = re.sub(r"e - mail", "email", text)
     text = re.sub(r"j k", "jk", text)
     text = re.sub(r"\s{2,}", " ", text)
-
-    text = text.split()
-    
-    # Optionally, shorten words to their stems
-    if stem_words:
-        stemmer = SnowballStemmer('english')
-        stemmed_words = [stemmer.stem(word) for word in text]
-        text = " ".join(stemmed_words)
     
     # Return a list of words
     return(text)
