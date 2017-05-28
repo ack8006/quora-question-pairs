@@ -1,14 +1,13 @@
 #!/bin/bash
 #
-#SBATCH --job-name=ak_experiment
+#SBATCH --job-name=kerasLSTM
 #SBATCH --partition=gpu
-#SBATCH --reservation=mhealth
 #SBATCH --gres=gpu:p1080:1
 #SBATCH --time=10:00:00
 #SBATCH --mem=30000
 #SBATCH --output=ak_experiment_%A.out
 #SBATCH --error=ak_experiment_%A.err
-#SBATCH --mail-user=ak6179@nyu.edu
+#SBATCH --mail-user=act444@nyu.edu
 
 # Log what we're running and where.
 echo $SLURM_JOBID - `hostname` >> ~/slurm-jobs.txt
@@ -23,7 +22,7 @@ python2.7 -m pip install pandas --upgrade --user
 python2.7 -m pip install nltk --upgrade --user
 python2.7 -m pip install gensim --upgrade --user
 
-cd /scratch/ak6179/lstm/keras_lstm
+cd /scratch/act444/github/quora_question_pairs/keras_lstm
 
-python2.7 -u lstm.py > experiments/experiment.1.log
+python2.7 -u lstm3.py > experiments/experiment.1_Keras.log
 
