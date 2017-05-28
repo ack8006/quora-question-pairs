@@ -50,8 +50,8 @@ EMBEDDING_DIM = 300
 
 num_lstm = np.random.randint(175, 275)
 num_dense = np.random.randint(100, 150)
-rate_drop_lstm = 0.15 + np.random.rand() * 0.25
-rate_drop_dense = 0.15 + np.random.rand() * 0.25
+rate_drop_lstm = 0.15 + np.random.rand() * 0.6
+rate_drop_dense = 0.15 + np.random.rand() * 0.6
 
 act = 'relu'
 re_weight = True # whether to re-weight classes to fit the 17.5% share in test set
