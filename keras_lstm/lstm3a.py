@@ -302,7 +302,7 @@ y1 = lstm_layer(embedded_sequences_2)
 
 leaks_input = Input(shape=(leaks.shape[1],))
 leaks_dense = Dense(num_dense/2)(leaks_input)
-merged = LeakyReLU(alpha=0.18)(merged)
+leaks_dense = LeakyReLU(alpha=0.18)(leaks_dense)
 
 merged = concatenate([x1, y1, leaks_dense])
 merged = BatchNormalization()(merged)
