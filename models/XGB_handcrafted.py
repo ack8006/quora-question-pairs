@@ -213,39 +213,11 @@ def main():
     df_train = pd.read_csv('../data/train.csv')
     df_train = df_train.fillna(' ')
 
-    df_test = pd.read_csv('../data/test.csv')
-    ques = pd.concat([df_train[['question1', 'question2']], \
-        df_test[['question1', 'question2']]], axis=0).reset_index(drop='index')
-    q_dict = defaultdict(set)
-    for i in range(ques.shape[0]):
-            q_dict[ques.question1[i]].add(ques.question2[i])
-            q_dict[ques.question2[i]].add(ques.question1[i])
-
-    def q1_freq(row):
-        return(len(q_dict[row['question1']]))
-        
-    def q2_freq(row):
-        return(len(q_dict[row['question2']]))
-        
-    def q1_q2_intersect(row):
-        return(len(set(q_dict[row['question1']]).intersection(set(q_dict[row['question2']]))))
-
-    df_train['q1_q2_intersect'] = df_train.apply(q1_q2_intersect, axis=1, raw=True)
-    df_train['q1_freq'] = df_train.apply(q1_freq, axis=1, raw=True)
-    df_train['q2_freq'] = df_train.apply(q2_freq, axis=1, raw=True)
-
-    df_test['q1_q2_intersect'] = df_test.apply(q1_q2_intersect, axis=1, raw=True)
-    df_test['q1_freq'] = df_test.apply(q1_freq, axis=1, raw=True)
-    df_test['q2_freq'] = df_test.apply(q2_freq, axis=1, raw=True)
-
-    test_leaky = df_test.loc[:, ['q1_q2_intersect','q1_freq','q2_freq']]
-    del df_test
-
     if args.debug:
         X_train_ab = X_train_ab.iloc[:100000]
         df_train = df_train.iloc[:100000]
 
-    train_leaky = df_train.loc[:, ['q1_q2_intersect','q1_freq','q2_freq']]
+    train_leaky = pd.read_csv('../data/train_leaky.csv')
 
     # explore
     stops = set(stopwords.words("english"))
@@ -285,6 +257,7 @@ def main():
     params = {}
     params['objective'] = 'binary:logistic'
     params['eval_metric'] = 'logloss'
+    #0.02, 7, 0.6, 0.2
     params['eta'] = 0.02
     params['max_depth'] = 7
     params['subsample'] = 0.6
@@ -301,13 +274,13 @@ def main():
         best_ll, best_key, best_model = 999, None, None
         for md in (6, 7, 8, 9):
             for ss in (0.4, 0.6, 0.8, 1.0):
-                for eta in (0.1, ):
+                for eta in (0.02,):
                     for colsam in (0.6, 0.8, 1.0):
                         params['max_depth'] = md
                         params['subsample'] = ss
                         params['eta'] = eta
                         params['colsample_bytree'] = colsam
-                        bst = xgb.train(params, d_train, 2000, watchlist, early_stopping_rounds=50, verbose_eval=50)
+                        bst = xgb.train(params, d_train, 2500, watchlist, early_stopping_rounds=50, verbose_eval=50)
                         key = (md, ss, eta, colsam)
                         tll = log_loss(y_train, bst.predict(d_train))
                         vll = log_loss(y_valid, bst.predict(d_valid))
@@ -342,6 +315,7 @@ def main():
         df_test['question2'] = df_test['question2'].map(lambda x: str(x).lower().split())
         
         x_test = build_features(df_test, stops, weights)
+        test_leaky = pd.read_csv('../data/test_leaky.csv')
         x_test = pd.concat((x_test, x_test_ab, test_leaky), axis=1)
         d_test = xgb.DMatrix(x_test)
         p_test = bst.predict(d_test)
