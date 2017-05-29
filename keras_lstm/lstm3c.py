@@ -24,9 +24,9 @@ from nltk.stem import SnowballStemmer
 
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
-from keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation, Bidirectional, merge, Reshape
+from keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation, Bidirectional, Reshape
 from keras.layers.advanced_activations import LeakyReLU
-from keras.layers.merge import concatenate
+from keras.layers.merge import concatenate, Dot
 from keras.models import Model
 from keras.layers.normalization import BatchNormalization
 from keras.callbacks import EarlyStopping, ModelCheckpoint
@@ -304,11 +304,9 @@ leaks_input = Input(shape=(leaks.shape[1],))
 leaks_dense = Dense(num_dense/2)(leaks_input)
 leaks_dense = LeakyReLU(alpha=0.18)(leaks_dense)
 
-cos_sim = merge([x1, y1], mode='cos', dot_axes=1)
-# cos_sim = Reshape((1,))(cos_sim)
-cos_sim = Reshape((cos_sim.shape[0],1))(cos_sim)
+cos_prox = Dot([x1, y1], normalize=True)
 
-merged = concatenate([x1, y1, leaks_dense, cos_sim])
+merged = concatenate([x1, y1, leaks_dense, cos_prox])
 merged = BatchNormalization()(merged)
 merged = Dropout(rate_drop_dense)(merged)
 
@@ -358,7 +356,7 @@ print('Start making the submission before fine-tuning')
 
 preds = model.predict([data_1_val, data_2_val, leaks_val], batch_size=8192, verbose=1)
 
-submission = pd.DataFrame({'test_id':test_ids, 'is_duplicate':preds.ravel()})
+submission = pd.DataFrame({'test_id':idx_val, 'is_duplicate':preds.ravel()})
 submission.to_csv('%.4f_'%(bst_val_score)+STAMP+'_val.csv', index=False)
 
 preds = model.predict([test_data_1, test_data_2, test_leaks.values], batch_size=8192, verbose=1)
