@@ -26,7 +26,7 @@ from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
 from keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation, Bidirectional, Reshape
 from keras.layers.advanced_activations import LeakyReLU
-from keras.layers.merge import concatenate, Dot
+from keras.layers.merge import concatenate, dot
 from keras.models import Model
 from keras.layers.normalization import BatchNormalization
 from keras.callbacks import EarlyStopping, ModelCheckpoint
@@ -304,7 +304,7 @@ leaks_input = Input(shape=(leaks.shape[1],))
 leaks_dense = Dense(num_dense/2)(leaks_input)
 leaks_dense = LeakyReLU(alpha=0.18)(leaks_dense)
 
-cos_prox = Dot([x1, y1], normalize=True)
+cos_prox = dot([x1, y1], axes=1, normalize=True)
 
 merged = concatenate([x1, y1, leaks_dense, cos_prox])
 merged = BatchNormalization()(merged)
@@ -354,17 +354,19 @@ bst_val_score = min(hist.history['val_loss'])
 ########################################
 print('Start making the submission before fine-tuning')
 
-preds = model.predict([data_1_val, data_2_val, leaks_val], batch_size=8192, verbose=1)
-
-submission = pd.DataFrame({'test_id':idx_val, 'is_duplicate':preds.ravel()})
-submission.to_csv('%.4f_'%(bst_val_score)+STAMP+'_val.csv', index=False)
-
 preds = model.predict([test_data_1, test_data_2, test_leaks.values], batch_size=8192, verbose=1)
 preds += model.predict([test_data_2, test_data_1, test_leaks.values], batch_size=8192, verbose=1)
 preds /= 2
 
 submission = pd.DataFrame({'test_id':test_ids, 'is_duplicate':preds.ravel()})
 submission.to_csv('%.4f_'%(bst_val_score)+STAMP+'.csv', index=False)
+
+preds = model.predict([data_1_val, data_2_val, leaks_val], batch_size=8192, verbose=1)
+
+submission = pd.DataFrame({'is_duplicate':preds.ravel()})
+submission.to_csv('%.4f_'%(bst_val_score)+STAMP+'_val.csv', index=False)
+
+
 
 
 
