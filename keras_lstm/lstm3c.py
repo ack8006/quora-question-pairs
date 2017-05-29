@@ -24,7 +24,7 @@ from nltk.stem import SnowballStemmer
 
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
-from keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation, Bidirectional, merge
+from keras.layers import Dense, Input, LSTM, Embedding, Dropout, Activation, Bidirectional, merge, Reshape
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.merge import concatenate
 from keras.models import Model
@@ -305,6 +305,7 @@ leaks_dense = Dense(num_dense/2)(leaks_input)
 leaks_dense = LeakyReLU(alpha=0.18)(leaks_dense)
 
 cos_sim = merge([x1, y1], mode='cos', dot_axes=1)
+cos_sim = Reshape((1,))(cos_sim)
 
 merged = concatenate([x1, y1, leaks_dense, cos_sim])
 merged = BatchNormalization()(merged)
