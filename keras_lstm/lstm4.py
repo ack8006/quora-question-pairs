@@ -321,10 +321,8 @@ bst_val_score = min(hist.history['val_loss'])
 print('Start making the submission before fine-tuning')
 
 preds = model.predict([data_1_val, data_2_val, leaks_val], batch_size=8192, verbose=1)
-preds += model.predict([data_2_val, data_1_val, leaks_val], batch_size=8192, verbose=1)
-preds /= 2
 
-submission = pd.DataFrame({'test_id':test_ids, 'is_duplicate':preds.ravel()})
+submission = pd.DataFrame({'test_id':idx_val, 'is_duplicate':preds.ravel()})
 submission.to_csv('%.4f_'%(bst_val_score)+STAMP+'_val.csv', index=False)
 
 
