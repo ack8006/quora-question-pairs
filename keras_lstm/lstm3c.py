@@ -305,7 +305,8 @@ leaks_dense = Dense(num_dense/2)(leaks_input)
 leaks_dense = LeakyReLU(alpha=0.18)(leaks_dense)
 
 cos_sim = merge([x1, y1], mode='cos', dot_axes=1)
-cos_sim = Reshape((1,))(cos_sim)
+# cos_sim = Reshape((1,))(cos_sim)
+cos_sim = Reshape((cos_sim.shape[0],1))(cos_sim)
 
 merged = concatenate([x1, y1, leaks_dense, cos_sim])
 merged = BatchNormalization()(merged)
@@ -356,8 +357,6 @@ bst_val_score = min(hist.history['val_loss'])
 print('Start making the submission before fine-tuning')
 
 preds = model.predict([data_1_val, data_2_val, leaks_val], batch_size=8192, verbose=1)
-preds += model.predict([data_2_val, data_1_val, leaks_val], batch_size=8192, verbose=1)
-preds /= 2
 
 submission = pd.DataFrame({'test_id':test_ids, 'is_duplicate':preds.ravel()})
 submission.to_csv('%.4f_'%(bst_val_score)+STAMP+'_val.csv', index=False)
