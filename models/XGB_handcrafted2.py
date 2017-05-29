@@ -260,7 +260,7 @@ def main():
                         params['subsample'] = ss
                         params['eta'] = eta
                         params['colsample_bytree'] = colsam
-                        bst = xgb.train(params, d_train, 2500, watchlist, early_stopping_rounds=50, verbose_eval=50)
+                        bst = xgb.train(params, d_train, 2500, watchlist, early_stopping_rounds=50, verbose_eval=500)
                         key = (md, ss, eta, colsam)
                         tll = log_loss(y_train, bst.predict(d_train))
                         vll = log_loss(y_valid, bst.predict(d_valid))
@@ -270,11 +270,19 @@ def main():
                             best_key = key
                             best_model = bst
                         results[key] = (tll, vll)
+
+                        p_val = bst.predict(d_valid, ntree_limit=bst.best_ntree_limit)
+                        sub = pd.DataFrame()
+                        sub['val_id'] = X_valid.index
+                        sub['is_duplicate'] = p_val
+                        sub.to_csv('../predictions/XGB_' + '_'.join(list(map(str, (md, ss, eta, colsam)))) + '_val.csv')
+
                         p_test = bst.predict(d_test, ntree_limit=bst.best_ntree_limit)
                         sub = pd.DataFrame()
                         sub['test_id'] = X_test.index
                         sub['is_duplicate'] = p_test
                         sub.to_csv('../predictions/XGB_' + '_'.join(list(map(str, (md, ss, eta, colsam)))) + '.csv')
+
         print('BEST: ', best_key, best_ll)
         print('max_depth, subsample, eta, colsample_by_tree')
         for k, v in results.items():
