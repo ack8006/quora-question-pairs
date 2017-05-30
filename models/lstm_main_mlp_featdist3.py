@@ -27,9 +27,9 @@ def get_glove_embeddings(file_path, corpus, ntoken, nemb):
     embeddings = torch.nn.init.xavier_uniform(torch.Tensor(ntoken, nemb))
     for line in f:
         split_line = line.split()
-        word = split_line[0]
+        word = ' '.join(split_line[0:-300])
         if word in corpus:
-            embedding = torch.Tensor([float(val) for val in split_line[1:]])
+            embedding = torch.Tensor([float(val) for val in split_line[-300:]])
             embeddings[corpus[word]] = embedding
     return embeddings
 
