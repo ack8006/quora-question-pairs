@@ -22,7 +22,7 @@ from preprocess import pad_and_shape, split_text
 
 
 def get_glove_embeddings(file_path, corpus, ntoken, nemb):
-    file_name = '/glove.6B.{}d.txt'.format(nemb)
+    file_name = 'glove.840B.300d.txt'.format(nemb)
     f = open(file_path+file_name, 'r')
     embeddings = torch.nn.init.xavier_uniform(torch.Tensor(ntoken, nemb))
     for line in f:
@@ -57,7 +57,7 @@ def main():
                         help='location of the data corpus')
     parser.add_argument('--presaved', action='store_true',
                         help='use presaved data')
-    parser.add_argument('--glovedata', type=str, default='../data/glove.6B',
+    parser.add_argument('--glovedata', type=str, default='../data',
                         help='location of the pretrained glove embeddings')
     parser.add_argument('--din', type=int, default=30,
                         help='length of LSTM')
