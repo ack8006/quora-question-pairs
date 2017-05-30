@@ -57,7 +57,7 @@ def main():
                         help='location of the data corpus')
     parser.add_argument('--presaved', action='store_true',
                         help='use presaved data')
-    parser.add_argument('--glovedata', type=str, default='../data',
+    parser.add_argument('--glovedata', type=str, default='../data/',
                         help='location of the pretrained glove embeddings')
     parser.add_argument('--din', type=int, default=30,
                         help='length of LSTM')
