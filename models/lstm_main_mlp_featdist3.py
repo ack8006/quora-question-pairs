@@ -191,6 +191,10 @@ def main():
                                 batch_size=args.batchsize,
                                 shuffle=False)
 
+    num_train = len(X)
+
+    del X, y, X_val, y_val, train_feat, val_feat, q1, q2, q1_val, q2_val
+
     ntokens = len(corpus)
     glove_embeddings = None
     if args.embinit == 'glove':
@@ -253,7 +257,7 @@ def main():
                 elapsed = time.time() - start_time
                 print('| Epoch {:3d} | {:5d}/{:5d} Batches | ms/batch {:5.2f} | '
                         'Loss {:.6f}'.format(
-                            epoch, ind, len(X) // args.batchsize,
+                            epoch, ind, num_train // args.batchsize,
                             elapsed * 1000.0 / args.loginterval, cur_loss))
                 start_time = time.time()
                 cur_loss = 0
@@ -279,12 +283,55 @@ def main():
             epoch, total_cost, train_acc, val_acc, train_ll, val_ll))
         print('-' * 89)
 
-    del train_loader, X, y, X_val, y_val
+    del train_loader
 
     print('Reloading Best Model')
     model = torch.load(args.save)
     model.cuda()
     model.eval()
+
+
+    print('RELOADING VALID')
+
+    valid_data = pd.read_csv('../data/val_data_shuffle.csv')
+    valid_data = valid_data.fillna(' ')
+
+    q1_val = list(valid_data['question1'].map(str))
+    q2_val = list(valid_data['question2'].map(str))
+    y_val = list(valid_data['is_duplicate'])
+
+    train_feat = pd.read_csv('../data/train_features_all_norm.csv')
+    val_feat = train_feat.iloc[valid_data['id']].values
+
+    del train_feat
+
+    if args.clean:
+        print('Cleaning Data')
+        stops = None
+        if args.rm_stops:
+            stops = stops = set(stopwords.words("english"))
+        q1_val = [split_text(x, stops) for x in q1_val]
+        q2_val = [split_text(x, stops) for x in q2_val] 
+    else:
+        q1_val = [x.lower().split() for x in q1_val]
+        q2_val = [x.lower().split() for x in q2_val]  
+
+
+    X_val = torch.Tensor(len(valid_data), 1, 3, feat_max)
+    X_val[:, 0, 0, :] = torch.from_numpy(corpus.pad_numericalize(q1_val, feat_max)).long()
+    X_val[:, 0, 1, :] = torch.from_numpy(corpus.pad_numericalize(q2_val, feat_max)).long()
+    X_val[:, 0, 2, :n_feat] = torch.from_numpy(np.array(val_feat))
+    y_val = torch.from_numpy(np.array(y_val)).long()
+
+
+    if args.cuda:
+        X_val, y_val = X_val.cuda(), y_val.cuda()
+
+    valid_loader = DataLoader(TensorDataset(X_val, y_val),
+                                batch_size=args.batchsize,
+                                shuffle=False)
+
+    del X_val, y_val, train_feat, val_feat, q1_val, q2_val, valid_data
 
     print('PREDICTING VALID')
     pred_list = []
@@ -294,6 +341,8 @@ def main():
 
     with open('../predictions/'+ args.save +'_val.pkl', 'wb') as f:
         pkl.dump(pred_list, f, protocol=pkl.HIGHEST_PROTOCOL)
+
+    del valid_data
 
     if args.reweight:
         print('LOADING TEST DATA')
