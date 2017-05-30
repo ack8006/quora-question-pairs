@@ -191,6 +191,8 @@ def main():
                                 batch_size=args.batchsize,
                                 shuffle=False)
 
+    num_train = len(X)
+
     del X, y, X_val, y_val, train_feat, val_feat, q1, q2, q1_val, q2_val
 
     ntokens = len(corpus)
@@ -255,7 +257,7 @@ def main():
                 elapsed = time.time() - start_time
                 print('| Epoch {:3d} | {:5d}/{:5d} Batches | ms/batch {:5.2f} | '
                         'Loss {:.6f}'.format(
-                            epoch, ind, len(X) // args.batchsize,
+                            epoch, ind, num_train // args.batchsize,
                             elapsed * 1000.0 / args.loginterval, cur_loss))
                 start_time = time.time()
                 cur_loss = 0
