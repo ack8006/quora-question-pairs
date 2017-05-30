@@ -210,9 +210,9 @@ def main():
     train_data = pd.read_csv('../data/train_data_shuffle.csv')
     valid_data = pd.read_csv('../data/val_data_shuffle.csv')
     y_train = train_data['is_duplicate'].values
-    y_valid = valid_data['is_duplicate'].values
+    y_valid_clean = valid_data['is_duplicate'].values
     train_feat = pd.read_csv('../data/train_features_all_norm.csv')
-    X_valid = train_feat.iloc[valid_data['id']]
+    X_valid_clean = train_feat.iloc[valid_data['id']]
     X_train = train_feat.iloc[train_data['id']]
 
 
@@ -224,8 +224,8 @@ def main():
     print(np.mean(y_train))
     del pos_train, neg_train
 
-    pos_valid = X_valid[y_valid == 1]
-    neg_valid = X_valid[y_valid == 0]
+    pos_valid = X_valid_clean[y_valid_clean == 1]
+    neg_valid = X_valid_clean[y_valid_clean == 0]
     X_valid = pd.concat((neg_valid, pos_valid.iloc[:int(0.8 * len(pos_valid))], neg_valid))
     y_valid = np.array([0] * neg_valid.shape[0] + [1] * pos_valid.iloc[:int(0.8 * len(pos_valid))].shape[0] + [0] * neg_valid.shape[0])
     print(np.mean(y_valid))
@@ -245,6 +245,7 @@ def main():
 
     d_train = xgb.DMatrix(X_train, label=y_train)
     d_valid = xgb.DMatrix(X_valid, label=y_valid)
+    d_valid_clean = xgb.DMatrix(X_valid_clean, label=y_valid_clean)
     d_test = xgb.DMatrix(X_test)
 
     watchlist = [(d_train, 'train'), (d_valid, 'valid')]
@@ -271,17 +272,17 @@ def main():
                             best_model = bst
                         results[key] = (tll, vll)
 
-                        p_val = bst.predict(d_valid, ntree_limit=bst.best_ntree_limit)
+                        p_val = bst.predict(d_valid_clean, ntree_limit=bst.best_ntree_limit)
                         sub = pd.DataFrame()
-                        sub['val_id'] = X_valid.index
+                        sub['val_id'] = X_valid_clean.index
                         sub['is_duplicate'] = p_val
-                        sub.to_csv('../predictions/XGB_' + '_'.join(list(map(str, (md, ss, eta, colsam)))) + '_val.csv')
+                        sub.to_csv('../predictions/XGB_' + '_'.join(list(map(str, (md, ss, eta, colsam)))) + '_val.csv', index=False)
 
                         p_test = bst.predict(d_test, ntree_limit=bst.best_ntree_limit)
                         sub = pd.DataFrame()
                         sub['test_id'] = X_test.index
                         sub['is_duplicate'] = p_test
-                        sub.to_csv('../predictions/XGB_' + '_'.join(list(map(str, (md, ss, eta, colsam)))) + '.csv')
+                        sub.to_csv('../predictions/XGB_' + '_'.join(list(map(str, (md, ss, eta, colsam)))) + '.csv', index=False)
 
         print('BEST: ', best_key, best_ll)
         print('max_depth, subsample, eta, colsample_by_tree')
