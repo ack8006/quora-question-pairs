@@ -313,8 +313,6 @@ def main():
     train_feat = pd.read_csv('../data/train_features_all_norm.csv')
     val_feat = train_feat.iloc[valid_data['id']].values
 
-    del train_feat
-
     if args.clean:
         print('Cleaning Data')
         stops = None
