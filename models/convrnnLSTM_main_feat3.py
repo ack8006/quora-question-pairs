@@ -350,8 +350,6 @@ def main():
     with open('../predictions/'+ args.save +'_val.pkl', 'wb') as f:
         pkl.dump(pred_list, f, protocol=pkl.HIGHEST_PROTOCOL)
 
-    del valid_data
-
     if args.reweight:
         print('LOADING TEST DATA')
         test_data = pd.read_csv('../data/test.csv')
